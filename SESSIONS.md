@@ -120,6 +120,43 @@ Layer 2c: Research/Enrichment. Design is complete in BIGBRAIN.md.
 
 ---
 
+## Session 3: OOM fix + startup import fix (2026-03-20)
+
+### Goal
+Diagnose and fix backend container crashing with exit code 137 on first large `.txt` upload, and a follow-on `NameError` that broke startup entirely.
+
+### What Got Built
+
+**`backend/app/main.py`** — 2 changes:
+- Added `get_model()` call inside `lifespan()` startup hook. The fastembed `nomic-embed-text-v1.5` model was lazily loaded on first request; when a large upload arrived the combined memory spike (file + model load + Claude response) OOM-killed the container (exit 137). Pre-loading at startup settles the model into RAM before any request can arrive.
+- Restored `from .api import entries, search, chat, entities` import line that was silently dropped by the linter during the previous fix, causing `NameError: name 'entries' is not defined` on every startup.
+
+### Key Design Decisions
+
+**Pre-warm vs. switch model**
+Pre-warming at startup is the minimal fix: it doesn't change model quality or vector dimensions, and it keeps the existing `embed_cache` volume working. Switching to a lighter model (`bge-small-en-v1.5`) is documented as a fallback for hosts with <1 GB free RAM.
+
+**No memory limit added to Compose**
+Adding `mem_limit` to docker-compose.yml would just make the OOM fail faster with a cleaner error, not prevent it. Pre-warming is the actual fix.
+
+### What's NOT in This Version
+- No fallback/retry on embed failure
+- No streaming or chunked processing for very large files
+
+### Migration / Deployment Notes
+- Pull latest, `docker compose up --build -d`
+- No DB changes, no new env vars
+- First startup is slower (model loads before the server accepts requests) — this is expected and healthy
+
+### Commits
+- `ab5d4be` — Pre-warm embedding model at startup to prevent OOM on large uploads
+- `2fc9756` — Fix missing api router imports dropped by linter
+
+### Next Up
+Layer 2c: Research/Enrichment. Design is complete in BIGBRAIN.md.
+
+---
+
 ## Template for Future Sessions
 
 ### Goal

@@ -219,6 +219,19 @@ docker compose restart backend
 docker compose up -d --build frontend
 ```
 
+**Backend exits with code 137 (OOM kill) on first large upload**
+The container was killed by the OS out-of-memory killer. Most likely the embedding model hadn't loaded yet and the combined memory spike exceeded available RAM. As of the current build, the model pre-loads at startup to prevent this. If it still happens, your host has less than ~1 GB free. Switch to a lighter model:
+```env
+# in .env
+EMBED_MODEL=BAAI/bge-small-en-v1.5
+EMBED_DIM=384
+```
+Then wipe the DB (vectors are stored at a fixed dimension and must match) and rebuild:
+```bash
+docker compose down -v
+docker compose up -d --build
+```
+
 **Wipe everything and start fresh**
 ```bash
 docker compose down -v   # -v removes volumes including DB data

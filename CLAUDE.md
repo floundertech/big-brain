@@ -5,12 +5,14 @@
 
 ## Current state (2026-03-20)
 
-Layer 2 (Entity Model) is complete and deployed. The fix landed in this session:
-- `claude.py` — `enrich_entry()` and `extract_entities()` are now `async` (via `asyncio.to_thread`); added `_parse_json()` helper that strips markdown code fences before `json.loads()`
-- `entries.py` — both calls are now properly `await`-ed in `create_entry` and `upload_entry`
+Layer 2 (Entity Model) is complete and stable. Two OOM / startup bugs fixed this session:
+- `main.py` — embedding model is now pre-loaded at startup (`get_model()` called in `lifespan`) to prevent OOM kill (exit 137) when first large upload arrives with model not yet in memory
+- `main.py` — router imports (`entries`, `search`, `chat`, `entities`) were accidentally dropped by a linter rewrite; restored
 
-### Known environment gotcha
-`ANTHROPIC_API_KEY` must be set in a `.env` file at the repo root before running `docker compose up`. If it's missing, the backend starts but every ingest request returns `500 TypeError: Could not resolve authentication method`. See README Troubleshooting.
+### Known environment gotchas
+- `ANTHROPIC_API_KEY` must be set in `.env` before `docker compose up`. Missing key → every ingest returns `500 TypeError: Could not resolve authentication method`.
+- First startup takes 2–5 min: embedding model (~520 MB) downloads from HuggingFace on first run.
+- On memory-constrained hosts (<1 GB free RAM): startup itself may OOM. Switch `EMBED_MODEL` to `BAAI/bge-small-en-v1.5` (384 dims, ~130 MB) and set `EMBED_DIM=384` if needed.
 
 ## What to know before starting a new session
 
