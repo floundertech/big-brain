@@ -85,8 +85,15 @@ Core ingestion, vector search, RAG chat.
 Person + Organization extraction on ingest, entity pages, entity-focused retrieval.
 Tag system deferred to later (simpler to add after gaining entity usage patterns).
 
-### Layer 2b — Typed Tag System (NEXT)
+### Layer 2b — Typed Tag System
 See design decisions below. Will add `domain:`, `company:`, `topic:` prefixes with AI suggestions.
+
+### Layer 2c — Research / Enrichment (NEXT)
+Claude-powered active research that creates new entries. Two entry points:
+1. **Entity Enrich button** — on any Person or Organization page, pull structured background on that entity
+2. **Research page** — open-ended query input ("tell me about Dynatrace's competitors", "summarize distributed tracing")
+
+Both save a new entry with `source_type: "research"`, auto-run enrichment + entity extraction, and link back to relevant entities. See design decisions below.
 
 ### Layer 3 — File Ingestion
 PDF, images, Office docs, audio (Whisper).
@@ -146,6 +153,44 @@ Entities are first-class — not just tags. They get their own pages and link to
 - Person → belongs to Organization(s) (future N:N)
 - Project → links People + Organizations + Entries (future hub)
 - Entity to Entity — eventual graph (person knows person, org acquired org, etc.)
+
+### Research / Enrichment
+
+**Goal:** Let Claude go get information and bring it back as a first-class entry, linkable to entities, searchable in RAG.
+
+**Two entry points:**
+- Entity page → "Enrich" button → pre-seeded prompt about that person/company
+- Research page → free-text input → anything ("Dynatrace competitors", "what is eBPF")
+
+**Source:** Claude API with web search tool (tool_use API). Live data, not just model knowledge. Web search is a provider — swap or disable independently of the rest of the stack.
+
+**Output flow:**
+1. Claude performs research with web search, returns structured markdown
+2. Result saved as `Entry` with `source_type: "research"`
+3. Normal enrichment pipeline runs: title, summary, tags generated
+4. Entity extraction runs: people + orgs auto-linked
+5. If triggered from an entity page, that entity is always linked regardless of extraction
+
+**Entry shape:**
+```
+entries.source_type = "research"
+entries.title       = auto-generated (e.g. "Acme Corp — Company Overview")
+entries.raw_text    = Claude's research output (markdown)
+entries.summary     = auto-generated
+entries.tags        = auto-generated
+entry_entities      = auto-extracted + seed entity (if entity-triggered)
+```
+
+**Frontend:**
+- Entity detail page: "Enrich" button → loading state → new entry appears at top of entry list
+- Research page: text input + "Research" button → same flow → shows generated entry on completion
+- No new page types needed — result is just a normal entry
+
+**Key constraints:**
+- Web search requires Claude tool_use API — `claude-sonnet-4-6` supports this
+- Rate-limit awareness: research calls will be slower + more expensive than normal enrichment
+- Hallucination risk: research entries should display a "Research (AI-generated)" badge so user knows provenance
+- Self-hosted constraint satisfied — no external SaaS, just Claude API calls we already make
 
 ### Retrieval Patterns (how the user actually searches)
 
