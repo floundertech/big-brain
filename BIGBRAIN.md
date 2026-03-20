@@ -186,10 +186,17 @@ entry_entities      = auto-extracted + seed entity (if entity-triggered)
 - Research page: text input + "Research" button → same flow → shows generated entry on completion
 - No new page types needed — result is just a normal entry
 
+**Source provenance (critical for business use):**
+- Claude synthesizes from search results — it is NOT a raw search result
+- Tool_use API returns the URLs Claude pulled from as part of the tool call response
+- These must be stored with the entry and displayed in the UI — user needs to verify sources before acting on competitive intel, prospect data, or deal context
+- Entry detail page for research entries should show a "Sources" section with all cited URLs
+- Consider storing sources in a `metadata` JSON column on `entries` (nullable, only populated for research type)
+
 **Key constraints:**
 - Web search requires Claude tool_use API — `claude-sonnet-4-6` supports this
-- Rate-limit awareness: research calls will be slower + more expensive than normal enrichment
-- Hallucination risk: research entries should display a "Research (AI-generated)" badge so user knows provenance
+- Research calls are slower + more expensive than normal enrichment — expected, acceptable
+- Research entries should display a "Research" source badge distinct from "note" and "transcript"
 - Self-hosted constraint satisfied — no external SaaS, just Claude API calls we already make
 
 ### Retrieval Patterns (how the user actually searches)
