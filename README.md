@@ -1,46 +1,141 @@
-# big-brain
+# Big Brain
 
-A self-hosted second brain for notes and transcripts. Paste or upload text, Claude auto-titles and tags it, then search or chat across your entire knowledge base.
+A self-hosted second brain. Paste notes, upload transcripts, and ask questions across everything you've captured. Claude auto-titles, summarizes, tags, and extracts people and companies from every entry. Click any person or organization to see everything you know about them.
+
+No cloud storage. No SaaS. Your data stays on your hardware.
 
 ## Stack
 
 | Layer | Tech |
 |---|---|
-| LLM | Claude API (Sonnet) |
-| Embeddings | fastembed + nomic-embed-text-v1.5 (local CPU) |
+| LLM | Claude API (claude-sonnet-4-6) |
+| Embeddings | fastembed + nomic-embed-text-v1.5 (local CPU, no GPU needed) |
 | Storage | PostgreSQL + pgvector |
-| Backend | FastAPI (Python) |
-| Frontend | React + Tailwind |
+| Backend | FastAPI (Python 3.11) |
+| Frontend | React + Tailwind (Vite) |
 | Runtime | Docker Compose |
 
-No subscriptions beyond Claude API.
+Only paid dependency: Anthropic API key (you probably already have one).
 
-## Quick start
+---
+
+## Setup
+
+### Prerequisites
+
+- Docker + Docker Compose
+- An [Anthropic API key](https://console.anthropic.com/)
+
+### First run
 
 ```bash
-cp .env.example .env
-# Add your ANTHROPIC_API_KEY to .env
+git clone <repo-url> big-brain
+cd big-brain
 
+cp .env.example .env
+```
+
+Open `.env` and fill in:
+
+```env
+ANTHROPIC_API_KEY=sk-ant-...          # required
+POSTGRES_PASSWORD=something-strong    # change from default
+```
+
+Then:
+
+```bash
 docker compose up -d
 ```
 
 - Frontend: http://localhost:3000
-- API: http://localhost:8000
+- API: http://localhost:8000/docs
 
-For LAN access (e.g. from phone), set `VITE_API_URL=http://your-server-ip:8000` in `.env` before building.
+**First startup takes 2–5 minutes.** The backend downloads the embedding model (~270MB) on first run and caches it in a Docker volume. Subsequent starts are instant.
+
+### LAN / VPN access (phone, tablet, other machines)
+
+Set your server's IP in `.env` before starting:
+
+```env
+VITE_API_URL=http://192.168.1.x:8000
+```
+
+Then rebuild the frontend container:
+
+```bash
+docker compose up -d --build frontend
+```
+
+The frontend bakes the API URL at build time (Vite env vars), so you need to rebuild when changing it.
+
+### Proxmox / homelab setup
+
+If running in an LXC or VM:
+
+- Expose ports 3000 and 8000 to your LAN, or put behind a reverse proxy (Nginx, Caddy, Traefik)
+- If behind a reverse proxy with HTTPS, set `VITE_API_URL` to the HTTPS URL of your API
+- The embedding model download happens inside the container — no host-level setup needed
+- DB data persists in the `db_data` Docker volume; embedding cache in `embed_cache`
+
+### Updating
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+The DB schema is managed via `CREATE TABLE IF NOT EXISTS` on startup — new tables are created automatically, existing data is preserved.
+
+---
 
 ## Features
 
-- **Add** — paste text or upload a `.txt` file; Claude generates a title, summary, and tags automatically
-- **Browse** — list all entries, filter by type (transcript / note)
-- **Search** — semantic search powered by vector embeddings
-- **Chat** — RAG chat: ask questions, Claude answers from your notes and cites sources
+### Add
+Paste text directly or upload a `.txt` file. Claude automatically generates:
+- Title
+- 2–3 sentence summary
+- Tags
+- Extracted people and organizations (linked as entities)
+
+Set `source_type` to `note` or `transcript` to categorize the entry.
+
+### Browse
+List all entries, filterable by source type. Click any entry to view full detail.
+
+### Search
+Semantic vector search — finds conceptually relevant entries, not just keyword matches. Powered by local embeddings (no external API calls).
+
+### Chat
+RAG chat: ask questions in plain English, Claude answers using your notes as context and cites which entries it pulled from.
+
+### Entities
+People and organizations are extracted automatically from every entry and stored as first-class entities.
+
+- Click a person or organization name on any entry detail page to see their entity page
+- Entity page shows every entry that mentions them
+- API filterable: `GET /entities/?entity_type=person`, `GET /entities/?entry_id=123`
+
+---
 
 ## Ingest from Plaud
 
 1. Export transcript as `.txt` from the Plaud app
 2. Go to **Add → Upload .txt**, set type to `transcript`, upload
-3. Done — it's indexed and searchable in seconds
+3. Done — indexed, searchable, and entities extracted in seconds
+
+---
+
+## Environment variables
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | Yes | — | From console.anthropic.com |
+| `POSTGRES_PASSWORD` | No | `changeme` | Change before exposing to network |
+| `VITE_API_URL` | No | `http://localhost:8000` | Set to server IP for LAN access |
+| `EMBED_MODEL` | No | `nomic-ai/nomic-embed-text-v1.5` | Override embedding model |
+
+---
 
 ## Data model
 
@@ -48,10 +143,74 @@ For LAN access (e.g. from phone), set `VITE_API_URL=http://your-server-ip:8000` 
 entries
   id            serial PK
   created_at    timestamptz
-  title         text          ← generated by Claude
-  source_type   text          ← "note" | "transcript"
+  updated_at    timestamptz
+  title         text              ← generated by Claude
+  source_type   text              ← "note" | "transcript" | "research"
   raw_text      text
-  summary       text          ← generated by Claude
-  tags          text[]        ← generated by Claude
-  embedding     vector(768)   ← nomic-embed-text-v1.5
+  summary       text              ← generated by Claude
+  tags          text[]            ← generated by Claude
+  embedding     vector(768)       ← nomic-embed-text-v1.5
+
+entities
+  id            serial PK
+  entity_type   text              ← "person" | "organization"
+  name          text              ← normalized, unique per type
+  created_at    timestamptz
+
+entry_entities
+  entry_id      FK → entries.id  (cascade delete)
+  entity_id     FK → entities.id (cascade delete)
+```
+
+---
+
+## API
+
+Interactive docs at http://localhost:8000/docs (Swagger UI).
+
+Key endpoints:
+
+```
+POST   /entries/           Create entry from text
+POST   /entries/upload     Create entry from .txt file
+GET    /entries/           List entries (filter: tag, source_type, limit, offset)
+GET    /entries/{id}       Entry detail
+DELETE /entries/{id}       Delete entry
+
+GET    /entities/          List entities (filter: entity_type, entry_id)
+GET    /entities/{id}      Entity detail with all linked entries
+
+GET    /search/?q=...      Semantic search
+POST   /chat/              RAG chat
+
+GET    /health             Health check
+```
+
+---
+
+## Troubleshooting
+
+**Backend fails to start / DB connection refused**
+The backend waits for Postgres to be healthy before starting. If it fails, check:
+```bash
+docker compose logs db
+docker compose logs backend
+```
+
+**Embedding model download fails**
+The model downloads from HuggingFace on first run. If behind a firewall or the download fails partway, restart the backend container:
+```bash
+docker compose restart backend
+```
+
+**Frontend shows "Network Error"**
+`VITE_API_URL` is baked in at build time. If you changed it, rebuild:
+```bash
+docker compose up -d --build frontend
+```
+
+**Wipe everything and start fresh**
+```bash
+docker compose down -v   # -v removes volumes including DB data
+docker compose up -d
 ```
