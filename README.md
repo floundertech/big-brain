@@ -29,8 +29,9 @@ Only paid dependency: Anthropic API key (you probably already have one).
 ### First run
 
 ```bash
-git clone <repo-url> big-brain
+git clone https://github.com/floudertech/big-brain
 cd big-brain
+git checkout claude/entity-model-lkCxq
 
 cp .env.example .env
 ```
@@ -51,7 +52,7 @@ docker compose up -d
 - Frontend: http://localhost:3000
 - API: http://localhost:8000/docs
 
-**First startup takes 2–5 minutes.** The backend downloads the embedding model (~270MB) on first run and caches it in a Docker volume. Subsequent starts are instant.
+**First startup takes 2–5 minutes.** The backend downloads the embedding model (~520MB) on first run and caches it in a Docker volume. Subsequent starts are instant.
 
 ### LAN / VPN access (phone, tablet, other machines)
 

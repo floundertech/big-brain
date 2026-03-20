@@ -68,10 +68,14 @@ Implement full entity model layer (DB → extraction → API → frontend pages)
 ### Commits
 
 - `3b9aeff` — Add entity model: Person + Organization extraction and pages
+- `b89bd7b` — Update docs: mark Layer 2 (Entity Model) complete, add session summary
+- `e250fb5` — Docs: add Research/Enrichment feature design (Layer 2c)
+- `6d56b87` — Docs: add source provenance requirement to Research feature design
+- `9d09717` — Update README, requirements, and .env.example for V2
 
 ### Next Up
 
-Layer 2b: Typed tag system with AI suggestions + action item extraction. Entity model provides foundation for understanding what tags should be pulled from entries.
+Layer 2c: Research/Enrichment implementation. Design is complete (see BIGBRAIN.md). Two entry points: Entity page "Enrich" button + standalone Research page. Output saved as `source_type: "research"` entries with source URL provenance. Layer 2b (typed tags) deferred until after gaining more entity usage patterns.
 
 ---
 
