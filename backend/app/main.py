@@ -2,12 +2,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.database import init_db
-from .api import entries, search, chat, entities
+from .services.embeddings import get_model
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    get_model()  # pre-load embedding model at startup to avoid OOM spike mid-request
     yield
 
 
