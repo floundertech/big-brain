@@ -6,7 +6,8 @@ from pydantic import BaseModel
 from ..core.database import get_db
 from ..core.models import Entry
 from ..services.embeddings import embed
-from ..services.claude import enrich_entry
+from ..services.claude import enrich_entry, extract_entities
+from ..services.entities import link_entities_to_entry
 
 router = APIRouter(prefix="/entries", tags=["entries"])
 
@@ -46,6 +47,9 @@ async def create_entry(
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+    extracted = extract_entities(text)
+    await link_entities_to_entry(db, entry.id, extracted)
+    await db.commit()
     return entry
 
 
@@ -70,6 +74,9 @@ async def upload_entry(
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+    extracted = extract_entities(text)
+    await link_entities_to_entry(db, entry.id, extracted)
+    await db.commit()
     return entry
 
 

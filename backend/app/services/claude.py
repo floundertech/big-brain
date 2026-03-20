@@ -16,6 +16,21 @@ Return ONLY valid JSON, no markdown, no explanation.
 Text:
 {text}"""
 
+_EXTRACT_ENTITIES_PROMPT = """You are helping build a personal knowledge graph.
+
+Given the following text, return a JSON object with:
+- "people": array of full names of people mentioned (strings)
+- "organizations": array of organization/company names mentioned (strings)
+
+Rules:
+- Only include names that are clearly identifiable as a specific person or organization.
+- Normalize names to title case.
+- Return empty arrays if none found.
+- Return ONLY valid JSON, no markdown, no explanation.
+
+Text:
+{text}"""
+
 _CHAT_SYSTEM = """You are a knowledgeable assistant with access to the user's personal notes and transcripts.
 Answer questions based on the provided context. Be concise and direct.
 If the context doesn't contain enough information, say so clearly.
@@ -29,6 +44,17 @@ def enrich_entry(text: str) -> dict:
         model="claude-sonnet-4-6",
         max_tokens=512,
         messages=[{"role": "user", "content": _ENRICH_PROMPT.format(text=truncated)}],
+    )
+    return json.loads(response.content[0].text)
+
+
+def extract_entities(text: str) -> dict:
+    """Return {"people": [...], "organizations": [...]} extracted from text."""
+    truncated = text[:8000]
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=256,
+        messages=[{"role": "user", "content": _EXTRACT_ENTITIES_PROMPT.format(text=truncated)}],
     )
     return json.loads(response.content[0].text)
 

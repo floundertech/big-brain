@@ -2,15 +2,18 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { api } from "../api";
 
+
 export default function EntryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [entry, setEntry] = useState(null);
+  const [entities, setEntities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     api.entries.get(id).then(setEntry).finally(() => setLoading(false));
+    api.entities.list({ entry_id: id }).then(setEntities);
   }, [id]);
 
   async function handleDelete() {
@@ -57,6 +60,23 @@ export default function EntryDetail() {
             </span>
           ))}
         </div>
+        {entities.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {entities.map((e) => (
+              <Link
+                key={e.id}
+                to={`/entity/${e.id}`}
+                className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                  e.entity_type === "person"
+                    ? "border-violet-800 text-violet-400 hover:border-violet-600"
+                    : "border-amber-900 text-amber-500 hover:border-amber-700"
+                }`}
+              >
+                {e.name}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {entry.summary && (
