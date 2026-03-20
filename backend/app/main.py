@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.database import init_db
 from .services.embeddings import get_model
+from .api import entries, search, chat, entities
 
 
 @asynccontextmanager
