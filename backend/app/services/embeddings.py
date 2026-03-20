@@ -13,5 +13,5 @@ def get_model() -> TextEmbedding:
 
 def embed(text: str) -> list[float]:
     model = get_model()
-    embeddings = list(model.embed([text]))
+    embeddings = list(model.embed([text[:8000]]))
     return embeddings[0].tolist()

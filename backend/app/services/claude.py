@@ -4,7 +4,7 @@ import asyncio
 import anthropic
 from ..core.config import settings
 
-client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=120.0)
 
 
 def _parse_json(text: str) -> dict:
