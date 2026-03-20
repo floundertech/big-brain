@@ -79,6 +79,47 @@ Layer 2c: Research/Enrichment implementation. Design is complete (see BIGBRAIN.m
 
 ---
 
+## Session 2: Async fix + JSON parsing hardening (2026-03-20)
+
+### Goal
+Fix `500 Internal Server Error` on `/entries/upload` caused by two bugs introduced during entity model work.
+
+### What Got Built
+
+**`backend/app/services/claude.py`** — 2 changes:
+- Added `_parse_json()` helper: strips ` ```json ` / ` ``` ` markdown fences before calling `json.loads()`. Claude occasionally wraps JSON responses in code fences, which caused `JSONDecodeError` crashes.
+- Made `enrich_entry()` and `extract_entities()` `async` using `asyncio.to_thread()`. The sync Anthropic client was being called directly in an async FastAPI handler, which blocks the event loop.
+
+**`backend/app/api/entries.py`** — added `await` to both `enrich_entry()` and `extract_entities()` calls in `create_entry` and `upload_entry`.
+
+**`CLAUDE.md`** — expanded from stub to full session context doc.
+
+**`README.md`** — added "500 on every upload" troubleshooting entry with diagnosis and fix commands.
+
+### Key Design Decisions
+
+**asyncio.to_thread vs. AsyncAnthropic**
+Used `asyncio.to_thread` wrapping the sync client rather than switching to `AsyncAnthropic`. Keeps the client instantiation simple (one client at module level) and avoids changing the `chat()` function which is called from a sync context. Can migrate to `AsyncAnthropic` later if needed.
+
+**_parse_json as a shared helper**
+Both `enrich_entry` and `extract_entities` need the same stripping logic. Centralizing it means one place to adjust if Claude's formatting behavior changes.
+
+### What's NOT in This Version
+- No retry logic on Claude API failures
+- `chat()` remains synchronous (it's called from a sync route handler and doesn't need async yet)
+
+### Migration / Deployment Notes
+- Drop-in replacement: no DB changes, no new env vars
+- Restart backend container to pick up the fix: `docker compose up -d --build backend`
+
+### Commits
+- `f2e277d` — Fix transcript upload failing due to Claude returning markdown-wrapped JSON
+
+### Next Up
+Layer 2c: Research/Enrichment. Design is complete in BIGBRAIN.md.
+
+---
+
 ## Template for Future Sessions
 
 ### Goal

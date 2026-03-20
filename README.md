@@ -191,6 +191,15 @@ GET    /health             Health check
 
 ## Troubleshooting
 
+**500 error on every upload / "Could not resolve authentication method"**
+The `ANTHROPIC_API_KEY` is missing or empty. Docker Compose reads it from `.env` in the project root — it does not fall through from your shell environment.
+```bash
+cp .env.example .env   # if you haven't already
+# edit .env and set ANTHROPIC_API_KEY=sk-ant-...
+docker compose down && docker compose up -d
+```
+Confirm it loaded: `docker compose exec backend env | grep ANTHROPIC`
+
 **Backend fails to start / DB connection refused**
 The backend waits for Postgres to be healthy before starting. If it fails, check:
 ```bash
