@@ -276,6 +276,66 @@ docker compose up -d --build backend
 
 ---
 
+## Session 6: Chunk RAG + Tavily fix (2026-03-21)
+
+### Goal
+Improve search recall on long transcripts, and fix web search silently failing despite `TAVILY_API_KEY` being set.
+
+### What Got Built
+
+**Backend: 3 files touched**
+- `backend/app/core/models.py`: new `Chunk` table — `entry_id` (FK cascade delete), `chunk_index`, `text`, `embedding vector(768)`
+- `backend/app/services/embeddings.py`: added `chunk_text(text, size=1000, overlap=150)` — splits text into overlapping windows and embeds each chunk
+- `backend/app/api/entries.py`: ingest pipeline now calls `chunk_text()` and inserts `Chunk` rows after creating an entry; added `POST /entries/reindex` endpoint to backfill chunks for all existing entries
+- `backend/app/api/chat.py`: `_search_notes` now queries `chunks` table first; falls back to entry-level embeddings for entries with no chunks (legacy data)
+
+**Infra: 1 file touched**
+- `docker-compose.yml`: added `TAVILY_API_KEY` to backend `environment` block — it was in `.env` but not forwarded to the container, causing `web_search` to always fail
+
+**Docs: 1 file touched**
+- `.env.example`: added `TAVILY_API_KEY` placeholder with comment
+
+### Key Design Decisions
+
+**Chunk size 1000 / overlap 150**
+Long transcripts (Plaud exports, meeting notes) were producing poor search results because a single 768-dim embedding for 5,000+ words collapses too much meaning. 1000-char chunks are large enough to preserve sentence context, small enough to be topically focused. 150-char overlap prevents splits cutting across a key phrase.
+
+**Fallback to entry-level embeddings**
+Entries ingested before this change have no chunk rows. Rather than requiring a mandatory migration, `_search_notes` checks both tables and merges results. Run `POST /entries/reindex` to upgrade existing entries.
+
+**Cascade delete on Chunk**
+`Chunk.entry_id` has `ON DELETE CASCADE` — deleting an entry automatically cleans up its chunks. No orphan rows.
+
+**docker-compose env forwarding bug**
+`.env` is loaded by Docker Compose at the host level, but individual env vars must be explicitly listed under `environment:` in the service definition to reach the container. `TAVILY_API_KEY` was missing from that list.
+
+### What's NOT in This Version
+- No chunk-level highlighting in search results (returns entry-level results after deduplication)
+- Reindex endpoint is unauthenticated — fine for self-hosted, but worth noting
+- No streaming for the agentic loop
+
+### Migration / Deployment Notes
+**New table:** `chunks` is auto-created on startup via `create_all`. No manual SQL needed.
+
+**Backfill existing entries:**
+```bash
+curl -X POST http://localhost:8000/entries/reindex
+```
+Or from inside the stack: `docker compose exec backend curl -X POST http://localhost:8000/entries/reindex`
+
+**Tavily fix — no action needed** if you're doing a fresh install. If upgrading, `docker compose up -d --build backend` picks up the new env forwarding.
+
+### Commits
+- `0d95180` — feat: chunk-based RAG for deep search in long transcripts
+- `c1650f5` — docs: add TAVILY_API_KEY to .env.example
+- `579b694` — fix: pass TAVILY_API_KEY through to backend container
+
+### Next Up
+- Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller
+- UI: tool-use indicator while agent is working, saved-entry link in chat response
+
+---
+
 ## Template for Future Sessions
 
 ### Goal

@@ -1,23 +1,22 @@
 # Session Notes
 
 ## Active branch
-`claude/second-brain-platform-design-lkCxq` (Layer 2e: Agentic Chat, in-progress as of 2026-03-21)
+`claude/second-brain-platform-design-lkCxq` (Session 6: Chunk RAG + Tavily fix, complete as of 2026-03-21)
 
 ## Current state (2026-03-21)
 
-Layer 2e (Agentic Chat) built this session. Chat is now a tool-using agent:
-- `search_notes` — semantic RAG (silent, always on)
-- `get_entity` — entity + linked entries lookup (silent)
-- `web_search` — Tavily web search (asks user before calling)
-- `save_entry` — saves research as a new entry (asks user before calling)
+Session 6 complete. Two changes:
+1. **Chunk-based RAG**: `search_notes` now queries a `chunks` table (1000-char windows, 150-char overlap) instead of entry-level embeddings. Better recall on long transcripts. `POST /entries/reindex` backfills chunks for existing entries. Falls back to entry-level embeddings for legacy data.
+2. **Tavily fix**: `TAVILY_API_KEY` was defined in `.env` but not forwarded in `docker-compose.yml`. Added it — web search now works.
 
-Previous sessions on main: Layer 2 Entity Model, async fix, OOM fix, markdown rendering.
+Previous sessions: Layer 2e Agentic Chat, Layer 2 Entity Model, async fix, OOM fix, markdown rendering.
 
 ### Known environment gotchas
 - `ANTHROPIC_API_KEY` must be set in `.env` before `docker compose up`. Missing key → every ingest returns `500 TypeError: Could not resolve authentication method`.
 - First startup takes 2–5 min: embedding model (~520 MB) downloads from HuggingFace on first run.
 - On memory-constrained hosts (<1 GB free RAM): startup itself may OOM. Switch `EMBED_MODEL` to `BAAI/bge-small-en-v1.5` (384 dims, ~130 MB) and set `EMBED_DIM=384` if needed.
 - **`meta` column migration required on existing DBs:** `ALTER TABLE entries ADD COLUMN IF NOT EXISTS meta jsonb;`
+- **`chunks` table migration required on existing DBs:** run `POST /entries/reindex` after deploying to backfill chunks for existing entries (the table is auto-created, but won't be populated until reindex runs).
 - `TAVILY_API_KEY` is optional — if unset, web_search tool gracefully returns an error message and Claude reports it.
 
 ## What to know before starting a new session
