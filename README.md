@@ -31,8 +31,6 @@ Only paid dependency: Anthropic API key (you probably already have one).
 ```bash
 git clone https://github.com/floudertech/big-brain
 cd big-brain
-git checkout claude/entity-model-lkCxq
-
 cp .env.example .env
 ```
 
