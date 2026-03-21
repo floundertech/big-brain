@@ -25,6 +25,7 @@ def _init_tracing():
 
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import (
+        AggregationTemporality,
         ConsoleMetricExporter,
         PeriodicExportingMetricReader,
     )
@@ -38,9 +39,19 @@ def _init_tracing():
     logger.warning("OTLP metrics endpoint: %s", metrics_endpoint)
 
     resource = Resource.create({SERVICE_NAME: "big-brain"})
+    # Dynatrace requires DELTA temporality — it rejects CUMULATIVE (the OTel default) with 400.
+    _delta = {
+        "Counter": AggregationTemporality.DELTA,
+        "UpDownCounter": AggregationTemporality.CUMULATIVE,
+        "Histogram": AggregationTemporality.DELTA,
+        "ObservableCounter": AggregationTemporality.DELTA,
+        "ObservableUpDownCounter": AggregationTemporality.CUMULATIVE,
+        "ObservableGauge": AggregationTemporality.CUMULATIVE,
+    }
     otlp_exporter = OTLPMetricExporter(
         endpoint=metrics_endpoint,
         headers=auth_headers,
+        preferred_temporality=_delta,
     )
     otlp_reader = PeriodicExportingMetricReader(otlp_exporter, export_interval_millis=15_000)
     # Console exporter dumps metric data to stdout — visible in `docker compose logs backend`
