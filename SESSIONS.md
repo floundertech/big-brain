@@ -402,6 +402,48 @@ Basic LLM telemetry verified visible in Dynatrace after the dependency fix.
 
 ---
 
+## Session 8: gen_ai Token Usage Spans (2026-03-21)
+
+### Goal
+Surface token counts and model metadata in Dynatrace so cost can be tracked per operation. Auto-instrumentation gives span visibility but not token-level detail.
+
+### What Got Built
+
+**Backend: 1 file touched**
+- `backend/app/services/claude.py`: added `_record_usage(response, operation)` helper + `from opentelemetry import trace` import. Called after every `client.messages.create` in `enrich_entry`, `extract_entities`, and `chat_turn`.
+
+### Key Design Decisions
+
+**`get_current_span()` + `is_recording()` guard**
+`opentelemetry-api` is always installed (traceloop depends on it). `get_current_span()` returns a no-op span when there's no active trace context, and `is_recording()` returns `False` for no-op spans — so the helper is truly zero-cost when tracing is off, with no conditional imports or feature flags needed.
+
+**Summing all Anthropic token buckets**
+Anthropic splits tokens into `input_tokens`, `cache_read_input_tokens`, and `cache_creation_input_tokens`. The OTel gen_ai semantic convention has a single `gen_ai.usage.input_tokens` field, so all three are summed. This matches what the chat assistant described and gives accurate cost math (cache reads are cheaper, but still count against quota).
+
+**Attributes set on the existing traceloop span, not a new span**
+`_record_usage` doesn't create a span — it enriches whatever span is already current. Traceloop's auto-instrumentation creates the span around the `messages.create` call; we're just filling in the attributes that auto-instrumentation misses. No nested span overhead.
+
+### What's NOT in This Version
+- No cost calculation in-app (DQL in Dynatrace can multiply token counts × per-token price)
+- No `@workflow` / `@task` decorators on the agentic loop iterations
+- No per-tool-call token breakdown (all tokens in a chat turn are aggregated at the `chat_turn` level)
+
+### Migration / Deployment Notes
+No DB changes, no new env vars. Rebuild backend:
+```bash
+docker compose up -d --build backend
+```
+Token attributes will appear on spans in Dynatrace immediately after rebuild.
+
+### Commits
+- `b1fc475` — feat: emit gen_ai token-usage attributes on OTel spans for Dynatrace cost visibility
+
+### Next Up
+- Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller
+- DQL notebook in Dynatrace for cost dashboard (outside the repo)
+
+---
+
 ## Template for Future Sessions
 
 ### Goal

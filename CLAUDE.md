@@ -1,15 +1,20 @@
 # Session Notes
 
 ## Active branch
-`claude/docs-session4-lkCxq` (Session 7 follow-up: traceloop-sdk dep fix, confirmed working as of 2026-03-21)
+`claude/docs-session4-lkCxq` (Session 8: gen_ai token usage spans, 2026-03-21)
 
 ## Current state (2026-03-21)
 
-Session 7 complete + confirmed working. Added optional OpenLLMetry (Traceloop) instrumentation for Dynatrace:
-- Set `DT_OTLP_ENDPOINT` + `DT_API_TOKEN` in `.env` to enable LLM tracing
-- All Anthropic API calls (`enrich_entry`, `extract_entities`, `chat_turn`) are auto-instrumented — no changes to `claude.py`
-- If env vars are unset, tracing is skipped silently — no impact on operation
-- **Telemetry confirmed visible in Dynatrace** after loosening `traceloop-sdk` version pin (was `==0.33.11`, now `>=0.33.11`)
+Session 8 complete. Added `_record_usage()` helper to `claude.py` — attaches `gen_ai.*` token-usage attributes to the active OTel span after every Anthropic API call:
+- `gen_ai.usage.input_tokens` — sums `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`
+- `gen_ai.usage.output_tokens`
+- `gen_ai.request.model`, `gen_ai.operation.name`, `gen_ai.response.finish_reasons`
+- No-op when tracing is disabled (`span.is_recording() == False`)
+- Applied to all three call sites: `enrich_entry`, `extract_entities`, `chat_turn`
+
+Session 7 complete + confirmed working. Auto-instrumentation via OpenLLMetry (Traceloop) for Dynatrace. Token/cost data now visible via custom span attributes.
+
+Previous sessions: Chunk RAG + Tavily fix, Layer 2e Agentic Chat, Layer 2 Entity Model, async fix, OOM fix, markdown rendering.
 
 Previous sessions: Chunk RAG + Tavily fix, Layer 2e Agentic Chat, Layer 2 Entity Model, async fix, OOM fix, markdown rendering.
 

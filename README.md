@@ -141,7 +141,7 @@ People and organizations are extracted automatically from every entry and stored
 | `EMBED_MODEL` | No | `nomic-ai/nomic-embed-text-v1.5` | Override embedding model |
 | `TAVILY_API_KEY` | No | — | Enables web search in chat. Free plan at tavily.com (1,000 searches/month). |
 | `DT_OTLP_ENDPOINT` | No | — | Dynatrace OTLP endpoint for LLM tracing. Format: `https://{env-id}.live.dynatrace.com/api/v2/otlp` |
-| `DT_API_TOKEN` | No | — | Dynatrace API token. Needs scopes: `openTelemetryTrace.ingest`, `metrics.ingest`, `logs.ingest`. Both this and `DT_OTLP_ENDPOINT` must be set to enable tracing. |
+| `DT_API_TOKEN` | No | — | Dynatrace API token. Needs scopes: `openTelemetryTrace.ingest`, `metrics.ingest`, `logs.ingest`. Both this and `DT_OTLP_ENDPOINT` must be set to enable tracing. When enabled, each Anthropic call emits `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, and `gen_ai.request.model` as span attributes — sufficient to build a cost dashboard in DQL. |
 
 ---
 
