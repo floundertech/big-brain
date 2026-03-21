@@ -256,6 +256,12 @@ The `meta` column was added to `entries` in Layer 2e. If you're updating an exis
 docker compose exec db psql -U postgres bigbrain -c "ALTER TABLE entries ADD COLUMN IF NOT EXISTS meta jsonb;"
 ```
 
+**Backend build fails with `ResolutionImpossible` / opentelemetry dependency conflict**
+`traceloop-sdk` beta sub-packages each pin `opentelemetry-instrumentation` to their exact beta version, which pip can't satisfy simultaneously. This is a known issue with `==0.33.11`. The `requirements.txt` now uses `>=0.33.11` to let pip find a compatible newer version. If you're on an older checkout, update:
+```bash
+git pull && docker compose up -d --build backend
+```
+
 **LLM traces not appearing in Dynatrace**
 Check that both `DT_OTLP_ENDPOINT` and `DT_API_TOKEN` are set in `.env` and forwarded to the container. Confirm the token has `openTelemetryTrace.ingest` scope. Check backend logs on startup — Traceloop logs whether it initialized successfully:
 ```bash

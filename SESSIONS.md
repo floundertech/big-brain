@@ -344,7 +344,7 @@ Add optional LLM-level tracing to Dynatrace via OpenLLMetry (Traceloop), with ze
 ### What Got Built
 
 **Backend: 3 files touched**
-- `backend/requirements.txt`: added `traceloop-sdk==0.33.11`
+- `backend/requirements.txt`: added `traceloop-sdk>=0.33.11` (initially pinned `==0.33.11`, loosened after pip dependency conflict — see Migration Notes)
 - `backend/app/core/config.py`: added optional `dt_otlp_endpoint` and `dt_api_token` settings
 - `backend/app/main.py`: added `_init_tracing()` — called at startup, no-ops if either env var is unset. When configured, calls `Traceloop.init()` which monkey-patches the Anthropic SDK so all `client.messages.create` calls emit OTel spans automatically.
 
@@ -386,8 +386,15 @@ DT_API_TOKEN=dt0c01....
 ```
 3. Rebuild backend: `docker compose up -d --build backend`
 
+**pip dependency conflict (`traceloop-sdk==0.33.11`):**
+`traceloop-sdk 0.33.11` pulls in multiple `opentelemetry-instrumentation-*` beta packages that each pin `opentelemetry-instrumentation` to their exact beta version (`==0.49b0`, `==0.49b1`, `==0.49b2`), which pip can't satisfy simultaneously. Fix: use `traceloop-sdk>=0.33.11` so pip picks a newer version with consistent deps.
+
 ### Commits
-- (see git log)
+- `02be30a` — feat: add OpenLLMetry tracing to Dynatrace (Session 7)
+- `5a63f17` — fix: loosen traceloop-sdk pin to resolve opentelemetry sub-dependency conflict
+
+### Confirmed
+Basic LLM telemetry verified visible in Dynatrace after the dependency fix.
 
 ### Next Up
 - Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller

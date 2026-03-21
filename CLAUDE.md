@@ -1,14 +1,15 @@
 # Session Notes
 
 ## Active branch
-`claude/second-brain-platform-design-lkCxq` (Session 7: OpenLLMetry observability, complete as of 2026-03-21)
+`claude/docs-session4-lkCxq` (Session 7 follow-up: traceloop-sdk dep fix, confirmed working as of 2026-03-21)
 
 ## Current state (2026-03-21)
 
-Session 7 complete. Added optional OpenLLMetry (Traceloop) instrumentation for Dynatrace:
+Session 7 complete + confirmed working. Added optional OpenLLMetry (Traceloop) instrumentation for Dynatrace:
 - Set `DT_OTLP_ENDPOINT` + `DT_API_TOKEN` in `.env` to enable LLM tracing
 - All Anthropic API calls (`enrich_entry`, `extract_entities`, `chat_turn`) are auto-instrumented — no changes to `claude.py`
 - If env vars are unset, tracing is skipped silently — no impact on operation
+- **Telemetry confirmed visible in Dynatrace** after loosening `traceloop-sdk` version pin (was `==0.33.11`, now `>=0.33.11`)
 
 Previous sessions: Chunk RAG + Tavily fix, Layer 2e Agentic Chat, Layer 2 Entity Model, async fix, OOM fix, markdown rendering.
 
@@ -20,6 +21,7 @@ Previous sessions: Chunk RAG + Tavily fix, Layer 2e Agentic Chat, Layer 2 Entity
 - **`chunks` table migration required on existing DBs:** run `POST /entries/reindex` after deploying to backfill chunks for existing entries (the table is auto-created, but won't be populated until reindex runs).
 - `TAVILY_API_KEY` is optional — if unset, web_search tool gracefully returns an error message and Claude reports it.
 - `DT_OTLP_ENDPOINT` + `DT_API_TOKEN` are both optional — if either is unset, tracing is skipped entirely. Token needs scopes: `openTelemetryTrace.ingest`, `metrics.ingest`, `logs.ingest`.
+- `traceloop-sdk==0.33.11` had an internal OpenTelemetry sub-dependency conflict (beta version pins couldn't be jointly satisfied). Pin is now `>=0.33.11` — let pip resolve the latest compatible version.
 
 ## What to know before starting a new session
 
