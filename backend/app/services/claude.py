@@ -23,27 +23,28 @@ client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=120.0)
 
 
 def _record_usage(response: anthropic.types.Message, operation: str) -> None:
-    """Attach gen_ai token-usage attributes to the current OTel span.
+    """Attach gen_ai token-usage attributes to the current OTel span and emit
+    the gen_ai.client.token.usage histogram metric.
 
-    No-op when tracing is disabled or no span is active.
-    Anthropic reports cached tokens separately, so we sum all three buckets
-    into gen_ai.usage.input_tokens per the OpenTelemetry gen_ai semantic conventions.
+    Span attributes are no-op when no span is active. Histogram always emits
+    as long as the MeterProvider is configured (the two are independent).
+    Anthropic reports cached tokens separately; we sum all three buckets into
+    gen_ai.usage.input_tokens per the OTel gen_ai semantic conventions.
     """
-    span = _otel_trace.get_current_span()
-    if not span.is_recording():
-        return
     usage = response.usage
     input_tokens = (
         usage.input_tokens
         + getattr(usage, "cache_read_input_tokens", 0)
         + getattr(usage, "cache_creation_input_tokens", 0)
     )
-    span.set_attribute("gen_ai.operation.name", operation)
-    span.set_attribute("gen_ai.request.model", response.model)
-    span.set_attribute("gen_ai.usage.input_tokens", input_tokens)
-    span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens)
-    if response.stop_reason:
-        span.set_attribute("gen_ai.response.finish_reasons", [response.stop_reason])
+    span = _otel_trace.get_current_span()
+    if span.is_recording():
+        span.set_attribute("gen_ai.operation.name", operation)
+        span.set_attribute("gen_ai.request.model", response.model)
+        span.set_attribute("gen_ai.usage.input_tokens", input_tokens)
+        span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens)
+        if response.stop_reason:
+            span.set_attribute("gen_ai.response.finish_reasons", [response.stop_reason])
     attrs = {"gen_ai.operation.name": operation, "gen_ai.request.model": response.model}
     hist = _get_histogram()
     hist.record(input_tokens, {**attrs, "gen_ai.token.type": "input"})

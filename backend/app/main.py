@@ -23,14 +23,16 @@ def _init_tracing():
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    from opentelemetry.sdk.resources import Resource, SERVICE_NAME
     from opentelemetry import metrics as _metrics
 
+    resource = Resource.create({SERVICE_NAME: "big-brain"})
     exporter = OTLPMetricExporter(
         endpoint=f"{settings.dt_otlp_endpoint.rstrip('/')}/v1/metrics",
         headers=auth_headers,
     )
     reader = PeriodicExportingMetricReader(exporter, export_interval_millis=60_000)
-    _metrics.set_meter_provider(MeterProvider(metric_readers=[reader]))
+    _metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=[reader]))
 
 
 @asynccontextmanager
