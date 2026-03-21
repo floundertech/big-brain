@@ -2,21 +2,22 @@ import json
 import logging
 import re
 import asyncio
+import time
 import anthropic
 from opentelemetry import trace as _otel_trace
 from ..core.config import settings
-from ..core.telemetry import get_token_usage_histogram
+from ..core.telemetry import get_token_usage_histogram, get_operation_duration_histogram
 
 logger = logging.getLogger("big-brain.claude")
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=120.0)
 
 
-def _record_usage(response: anthropic.types.Message, operation: str) -> None:
+def _record_usage(response: anthropic.types.Message, operation: str, elapsed: float) -> None:
     """Attach gen_ai token-usage attributes to the current OTel span and emit
-    the gen_ai.client.token.usage histogram metric.
+    gen_ai.client.token.usage and gen_ai.client.operation.duration histograms.
 
-    Span attributes are no-op when no span is active. Histogram always emits
+    Span attributes are no-op when no span is active. Histograms always emit
     as long as the MeterProvider is configured (the two are independent).
     Anthropic reports cached tokens separately; we sum all three buckets into
     gen_ai.usage.input_tokens per the OTel gen_ai semantic conventions.
@@ -40,12 +41,13 @@ def _record_usage(response: anthropic.types.Message, operation: str) -> None:
     if hist is not None:
         hist.record(input_tokens, {**attrs, "gen_ai.token.type": "input"})
         hist.record(usage.output_tokens, {**attrs, "gen_ai.token.type": "output"})
-        logger.warning(
-            "histogram.record: op=%s input=%d output=%d",
-            operation, input_tokens, usage.output_tokens,
-        )
-    else:
-        logger.warning("histogram is None — MeterProvider not initialized?")
+    dur_hist = get_operation_duration_histogram()
+    if dur_hist is not None:
+        dur_hist.record(elapsed, attrs)
+    logger.warning(
+        "metrics.record: op=%s input=%d output=%d duration=%.3fs",
+        operation, input_tokens, usage.output_tokens, elapsed,
+    )
 
 
 def _parse_json(text: str) -> dict:
@@ -170,31 +172,34 @@ Be concise and direct."""
 async def enrich_entry(text: str) -> dict:
     """Get title, summary, and tags for a piece of text."""
     truncated = text[:8000]  # stay well within token limits
+    t0 = time.perf_counter()
     response = await asyncio.to_thread(
         client.messages.create,
         model="claude-sonnet-4-6",
         max_tokens=512,
         messages=[{"role": "user", "content": _ENRICH_PROMPT.format(text=truncated)}],
     )
-    _record_usage(response, "enrich_entry")
+    _record_usage(response, "enrich_entry", time.perf_counter() - t0)
     return _parse_json(response.content[0].text)
 
 
 async def extract_entities(text: str) -> dict:
     """Return {"people": [...], "organizations": [...]} extracted from text."""
     truncated = text[:8000]
+    t0 = time.perf_counter()
     response = await asyncio.to_thread(
         client.messages.create,
         model="claude-sonnet-4-6",
         max_tokens=256,
         messages=[{"role": "user", "content": _EXTRACT_ENTITIES_PROMPT.format(text=truncated)}],
     )
-    _record_usage(response, "extract_entities")
+    _record_usage(response, "extract_entities", time.perf_counter() - t0)
     return _parse_json(response.content[0].text)
 
 
 def chat_turn(messages: list[dict]) -> anthropic.types.Message:
     """Single Claude turn with tools. Returns the raw Message response."""
+    t0 = time.perf_counter()
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=2048,
@@ -202,5 +207,5 @@ def chat_turn(messages: list[dict]) -> anthropic.types.Message:
         tools=TOOLS,
         messages=messages,
     )
-    _record_usage(response, "chat_turn")
+    _record_usage(response, "chat_turn", time.perf_counter() - t0)
     return response

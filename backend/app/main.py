@@ -73,9 +73,15 @@ def _init_tracing():
         unit="{token}",
         description="Number of tokens used in gen_ai API calls",
     )
-    from .core.telemetry import set_token_usage_histogram
+    from .core.telemetry import set_token_usage_histogram, set_operation_duration_histogram
     set_token_usage_histogram(hist)
-    logger.warning("MeterProvider initialized, histogram registered")
+    dur_hist = provider.get_meter("big-brain.claude").create_histogram(
+        "gen_ai.client.operation.duration",
+        unit="s",
+        description="Duration of gen_ai API calls in seconds",
+    )
+    set_operation_duration_histogram(dur_hist)
+    logger.warning("MeterProvider initialized, histograms registered")
     return provider
 
 
