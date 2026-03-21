@@ -140,6 +140,8 @@ People and organizations are extracted automatically from every entry and stored
 | `VITE_API_URL` | No | `http://localhost:8000` | Set to server IP for LAN access |
 | `EMBED_MODEL` | No | `nomic-ai/nomic-embed-text-v1.5` | Override embedding model |
 | `TAVILY_API_KEY` | No | — | Enables web search in chat. Free plan at tavily.com (1,000 searches/month). |
+| `DT_OTLP_ENDPOINT` | No | — | Dynatrace OTLP endpoint for LLM tracing. Format: `https://{env-id}.live.dynatrace.com/api/v2/otlp` |
+| `DT_API_TOKEN` | No | — | Dynatrace API token. Needs scopes: `openTelemetryTrace.ingest`, `metrics.ingest`, `logs.ingest`. Both this and `DT_OTLP_ENDPOINT` must be set to enable tracing. |
 
 ---
 
@@ -252,6 +254,12 @@ Set `TAVILY_API_KEY=tvly-...` in `.env` (free plan at tavily.com), then restart 
 The `meta` column was added to `entries` in Layer 2e. If you're updating an existing install, run this once:
 ```bash
 docker compose exec db psql -U postgres bigbrain -c "ALTER TABLE entries ADD COLUMN IF NOT EXISTS meta jsonb;"
+```
+
+**LLM traces not appearing in Dynatrace**
+Check that both `DT_OTLP_ENDPOINT` and `DT_API_TOKEN` are set in `.env` and forwarded to the container. Confirm the token has `openTelemetryTrace.ingest` scope. Check backend logs on startup — Traceloop logs whether it initialized successfully:
+```bash
+docker compose logs backend | grep -i traceloop
 ```
 
 **Chat search misses content in long transcripts (entries ingested before Session 6)**

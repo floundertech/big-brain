@@ -336,6 +336,65 @@ Or from inside the stack: `docker compose exec backend curl -X POST http://local
 
 ---
 
+## Session 7: OpenLLMetry Observability (2026-03-21)
+
+### Goal
+Add optional LLM-level tracing to Dynatrace via OpenLLMetry (Traceloop), with zero impact when not configured.
+
+### What Got Built
+
+**Backend: 3 files touched**
+- `backend/requirements.txt`: added `traceloop-sdk==0.33.11`
+- `backend/app/core/config.py`: added optional `dt_otlp_endpoint` and `dt_api_token` settings
+- `backend/app/main.py`: added `_init_tracing()` — called at startup, no-ops if either env var is unset. When configured, calls `Traceloop.init()` which monkey-patches the Anthropic SDK so all `client.messages.create` calls emit OTel spans automatically.
+
+**Infra: 2 files touched**
+- `docker-compose.yml`: forward `DT_OTLP_ENDPOINT` and `DT_API_TOKEN` to backend container
+- `.env.example`: document both vars with endpoint format, token scope requirements
+
+### Key Design Decisions
+
+**Lazy import of Traceloop**
+`from traceloop.sdk import Traceloop` is inside `_init_tracing()`, not at module level. This means if the package is somehow missing, the import error only triggers when tracing is actually configured — it doesn't crash the app on startup when observability is disabled.
+
+**No changes to claude.py**
+Traceloop monkey-patches `anthropic.Anthropic.messages.create` at the SDK level. Every call — `enrich_entry`, `extract_entities`, `chat_turn` — gets traced automatically without any decorator or wrapper changes. This keeps the service layer clean.
+
+**Both vars required to enable**
+Requiring both `DT_OTLP_ENDPOINT` and `DT_API_TOKEN` to be non-empty before calling `Traceloop.init()` prevents partial misconfiguration (e.g. endpoint set but no token → silent auth failures). Either both work or neither runs.
+
+**Why Traceloop over raw OpenTelemetry**
+Traceloop's `traceloop-sdk` bundles `opentelemetry-instrumentation-anthropic` and handles the OTLP exporter setup in one `init()` call. Raw OTel would require manual span creation around every Claude call. Auto-instrumentation is less code and less maintenance surface.
+
+**Mac (ARM) + homelab x86 strategy**
+OpenLLMetry runs inside the Python process — no host agent needed. Works on Mac for dev now. On the homelab x86, OneAgent on the host will wrap the outer FastAPI request spans; OpenLLMetry spans will appear as child spans, giving a full-stack trace from HTTP request → Claude tool loop → individual LLM calls.
+
+### What's NOT in This Version
+- No custom spans around pgvector chunk queries (OneAgent will handle DB tracing on homelab)
+- No `@workflow` / `@task` decorators on the agentic loop — auto-instrumentation is sufficient for now
+- No Dynatrace dashboard or alerting config — that lives in the tenant, not the repo
+
+### Migration / Deployment Notes
+No DB changes. No mandatory setup — tracing is opt-in.
+
+**To enable:**
+1. Create an API token in your Dynatrace tenant with scopes: `openTelemetryTrace.ingest`, `metrics.ingest`, `logs.ingest`
+2. Add to `.env`:
+```env
+DT_OTLP_ENDPOINT=https://{your-env-id}.live.dynatrace.com/api/v2/otlp
+DT_API_TOKEN=dt0c01....
+```
+3. Rebuild backend: `docker compose up -d --build backend`
+
+### Commits
+- (see git log)
+
+### Next Up
+- Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller
+- OneAgent on homelab x86 once Big Brain moves to production
+
+---
+
 ## Template for Future Sessions
 
 ### Goal
