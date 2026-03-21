@@ -9,3 +9,4 @@ anthropic==0.86.0
 python-multipart==0.0.20
 pydantic-settings==2.7.0
 traceloop-sdk>=0.33.11
+opentelemetry-exporter-otlp-proto-http>=1.0.0

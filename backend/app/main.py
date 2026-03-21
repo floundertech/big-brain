@@ -10,13 +10,27 @@ from .api import entries, search, chat, entities
 def _init_tracing():
     if not settings.dt_otlp_endpoint or not settings.dt_api_token:
         return
+    auth_headers = {"Authorization": f"Api-Token {settings.dt_api_token}"}
+
     from traceloop.sdk import Traceloop
     Traceloop.init(
         app_name="big-brain",
         api_endpoint=settings.dt_otlp_endpoint,
-        headers={"Authorization": f"Api-Token {settings.dt_api_token}"},
+        headers=auth_headers,
         disable_batch=False,
     )
+
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    from opentelemetry import metrics as _metrics
+
+    exporter = OTLPMetricExporter(
+        endpoint=f"{settings.dt_otlp_endpoint.rstrip('/')}/v1/metrics",
+        headers=auth_headers,
+    )
+    reader = PeriodicExportingMetricReader(exporter, export_interval_millis=60_000)
+    _metrics.set_meter_provider(MeterProvider(metric_readers=[reader]))
 
 
 @asynccontextmanager

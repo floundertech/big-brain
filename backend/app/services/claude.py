@@ -6,12 +6,18 @@ from opentelemetry import trace as _otel_trace
 from opentelemetry import metrics as _otel_metrics
 from ..core.config import settings
 
-_meter = _otel_metrics.get_meter("big-brain.claude")
-_token_usage_histogram = _meter.create_histogram(
-    "gen_ai.client.token.usage",
-    unit="{token}",
-    description="Number of tokens used in gen_ai API calls",
-)
+_token_usage_histogram = None
+
+
+def _get_histogram():
+    global _token_usage_histogram
+    if _token_usage_histogram is None:
+        _token_usage_histogram = _otel_metrics.get_meter("big-brain.claude").create_histogram(
+            "gen_ai.client.token.usage",
+            unit="{token}",
+            description="Number of tokens used in gen_ai API calls",
+        )
+    return _token_usage_histogram
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=120.0)
 
@@ -39,8 +45,9 @@ def _record_usage(response: anthropic.types.Message, operation: str) -> None:
     if response.stop_reason:
         span.set_attribute("gen_ai.response.finish_reasons", [response.stop_reason])
     attrs = {"gen_ai.operation.name": operation, "gen_ai.request.model": response.model}
-    _token_usage_histogram.record(input_tokens, {**attrs, "gen_ai.token.type": "input"})
-    _token_usage_histogram.record(usage.output_tokens, {**attrs, "gen_ai.token.type": "output"})
+    hist = _get_histogram()
+    hist.record(input_tokens, {**attrs, "gen_ai.token.type": "input"})
+    hist.record(usage.output_tokens, {**attrs, "gen_ai.token.type": "output"})
 
 
 def _parse_json(text: str) -> dict:
