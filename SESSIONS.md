@@ -157,6 +157,48 @@ Layer 2c: Research/Enrichment. Design is complete in BIGBRAIN.md.
 
 ---
 
+## Session 4: Markdown rendering + housekeeping (2026-03-21)
+
+### Goal
+Render Claude's chat responses as markdown in the frontend, and add a `.gitignore` to stop committing build artifacts.
+
+### What Got Built
+
+**Frontend: 2 files touched/created**
+- `frontend/src/components/Markdown.jsx`: new reusable component wrapping `react-markdown` + `remark-gfm`. Styles paragraphs, lists, headings, inline/block code, blockquotes, links — all scoped to fit the dark chat UI
+- `frontend/src/pages/Chat.jsx`: assistant message bubbles now render through `<Markdown>` instead of raw text
+
+**Root**
+- `.gitignore`: excludes `node_modules/`, `frontend/dist/`, `__pycache__/`, `*.pyc`, `.env`, `*.egg-info/`, `.venv/`
+
+**Git hygiene**
+- `claude/second-brain-platform-design-lkCxq` was rebased onto `main` (had diverged after PRs merged), then force-pushed and merged via PR, then deleted
+
+### Key Design Decisions
+
+**Shared Markdown component**
+A dedicated `Markdown.jsx` rather than inlining `react-markdown` in `Chat.jsx` — easy to reuse on entry detail pages or anywhere else Claude-generated text appears.
+
+**GFM plugin**
+`remark-gfm` enables tables, strikethrough, and task lists — Claude occasionally uses these in structured answers, so worth including from the start.
+
+### What's NOT in This Version
+- No syntax highlighting for code blocks (could add `react-syntax-highlighter` later)
+- `Markdown.jsx` not yet used on Entry detail / Entity pages (Claude-generated summaries are plain text there)
+
+### Migration / Deployment Notes
+- `npm install` (or `docker compose up --build`) picks up `react-markdown` and `remark-gfm` automatically from `package.json`
+- No backend changes, no DB changes, no new env vars
+
+### Commits
+- `9440ea3` — Add .gitignore (node_modules, dist, pycache, .env)
+- `cd73356` — Render chat assistant responses as markdown
+
+### Next Up
+Layer 2c: Research/Enrichment. Design is complete in BIGBRAIN.md.
+
+---
+
 ## Template for Future Sessions
 
 ### Goal

@@ -1,13 +1,13 @@
 # Session Notes
 
 ## Active branch
-`claude/entity-model-lkCxq`
+`main` (all feature work merged as of 2026-03-21)
 
-## Current state (2026-03-20)
+## Current state (2026-03-21)
 
-Layer 2 (Entity Model) is complete and stable. Two OOM / startup bugs fixed this session:
-- `main.py` — embedding model is now pre-loaded at startup (`get_model()` called in `lifespan`) to prevent OOM kill (exit 137) when first large upload arrives with model not yet in memory
-- `main.py` — router imports (`entries`, `search`, `chat`, `entities`) were accidentally dropped by a linter rewrite; restored
+Layer 2 (Entity Model) is complete and stable on `main`. Two housekeeping items landed this session:
+- `.gitignore` added — `node_modules/`, `dist/`, `__pycache__/`, `*.pyc`, `.env`, `.venv/` now excluded
+- Chat assistant responses now rendered as markdown — `Markdown.jsx` component wraps `react-markdown` + `remark-gfm`; used in `Chat.jsx` for assistant message bubbles
 
 ### Known environment gotchas
 - `ANTHROPIC_API_KEY` must be set in `.env` before `docker compose up`. Missing key → every ingest returns `500 TypeError: Could not resolve authentication method`.
@@ -22,7 +22,8 @@ Layer 2 (Entity Model) is complete and stable. Two OOM / startup bugs fixed this
 - All Claude API calls go through `backend/app/services/claude.py` — add new prompts/functions there
 - Ingest pipeline: `entries.py` → `claude.enrich_entry()` + `claude.extract_entities()` → `services/entities.py:link_entities_to_entry()`
 - DB schema is auto-created on startup via `create_all` — no Alembic
-- Never push to a branch other than the one listed above
+- New feature branches should follow the `claude/<feature>-<sessionid>` naming convention
+- Never push to main directly — always branch, PR, merge
 
 ## Required at end of every session
 
