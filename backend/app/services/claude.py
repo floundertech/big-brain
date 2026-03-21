@@ -3,7 +3,15 @@ import re
 import asyncio
 import anthropic
 from opentelemetry import trace as _otel_trace
+from opentelemetry import metrics as _otel_metrics
 from ..core.config import settings
+
+_meter = _otel_metrics.get_meter("big-brain.claude")
+_token_usage_histogram = _meter.create_histogram(
+    "gen_ai.client.token.usage",
+    unit="{token}",
+    description="Number of tokens used in gen_ai API calls",
+)
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=120.0)
 
@@ -30,6 +38,9 @@ def _record_usage(response: anthropic.types.Message, operation: str) -> None:
     span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens)
     if response.stop_reason:
         span.set_attribute("gen_ai.response.finish_reasons", [response.stop_reason])
+    attrs = {"gen_ai.operation.name": operation, "gen_ai.request.model": response.model}
+    _token_usage_histogram.record(input_tokens, {**attrs, "gen_ai.token.type": "input"})
+    _token_usage_histogram.record(usage.output_tokens, {**attrs, "gen_ai.token.type": "output"})
 
 
 def _parse_json(text: str) -> dict:

@@ -411,6 +411,7 @@ Surface token counts and model metadata in Dynatrace so cost can be tracked per 
 
 **Backend: 1 file touched**
 - `backend/app/services/claude.py`: added `_record_usage(response, operation)` helper + `from opentelemetry import trace` import. Called after every `client.messages.create` in `enrich_entry`, `extract_entities`, and `chat_turn`.
+- `backend/app/services/claude.py` (follow-up): also emits `gen_ai.client.token.usage` histogram via `opentelemetry.metrics` — one `record()` for input tokens, one for output tokens, both tagged with `gen_ai.token.type`, `gen_ai.operation.name`, and `gen_ai.request.model`. This is the OTLP metric Dynatrace needs for cost dashboards.
 
 ### Key Design Decisions
 
@@ -427,6 +428,7 @@ Anthropic splits tokens into `input_tokens`, `cache_read_input_tokens`, and `cac
 - No cost calculation in-app (DQL in Dynatrace can multiply token counts × per-token price)
 - No `@workflow` / `@task` decorators on the agentic loop iterations
 - No per-tool-call token breakdown (all tokens in a chat turn are aggregated at the `chat_turn` level)
+- Dynatrace dashboard/DQL notebook is out-of-repo work (separate session)
 
 ### Migration / Deployment Notes
 No DB changes, no new env vars. Rebuild backend:
@@ -437,10 +439,11 @@ Token attributes will appear on spans in Dynatrace immediately after rebuild.
 
 ### Commits
 - `b1fc475` — feat: emit gen_ai token-usage attributes on OTel spans for Dynatrace cost visibility
+- _(see follow-up commit)_ — feat: emit gen_ai.client.token.usage histogram metric for Dynatrace cost dashboards
 
 ### Next Up
 - Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller
-- DQL notebook in Dynatrace for cost dashboard (outside the repo)
+- DQL notebook in Dynatrace for cost dashboard (outside the repo — separate session)
 
 ---
 

@@ -5,11 +5,12 @@
 
 ## Current state (2026-03-21)
 
-Session 8 complete. Added `_record_usage()` helper to `claude.py` — attaches `gen_ai.*` token-usage attributes to the active OTel span after every Anthropic API call:
+Session 8 complete. Added `_record_usage()` helper to `claude.py` — attaches `gen_ai.*` token-usage attributes to the active OTel span after every Anthropic API call, and emits the `gen_ai.client.token.usage` OTLP histogram metric:
 - `gen_ai.usage.input_tokens` — sums `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`
 - `gen_ai.usage.output_tokens`
 - `gen_ai.request.model`, `gen_ai.operation.name`, `gen_ai.response.finish_reasons`
-- No-op when tracing is disabled (`span.is_recording() == False`)
+- `gen_ai.client.token.usage` histogram (OTLP metric) — one record per token type (`input`/`output`), tagged with operation and model
+- No-op span guard when tracing is disabled; histogram always emits if OTel metrics exporter is configured
 - Applied to all three call sites: `enrich_entry`, `extract_entities`, `chat_turn`
 
 Session 7 complete + confirmed working. Auto-instrumentation via OpenLLMetry (Traceloop) for Dynatrace. Token/cost data now visible via custom span attributes.
