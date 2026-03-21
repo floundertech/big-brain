@@ -462,6 +462,43 @@ OTLP metrics appear in Dynatrace within ~15 seconds of the first Claude API call
 
 ---
 
+## Session 9: Dynatrace Field Reference Research (2026-03-21)
+
+### Goal
+Validate Session 8's gen_ai span attributes and DQL queries against the official Dynatrace Semantic Dictionary / Global Field Reference. No feature work.
+
+### What Got Built
+Nothing — research only. No files changed.
+
+### Key Findings
+
+**`span.status_code` confirmed**
+Legal values per spec: `"ok"` and `"error"` only. Null means "unset." Session 8's DQL fix (`isNull(span.status_code) or span.status_code == "ok"`) is correct. The built-in AI Observability tile treating non-null = failure is a Dynatrace bug.
+
+**`gen_ai.provider.name` vs `gen_ai.system`**
+The official Dynatrace field is `gen_ai.provider.name` (values: `openai`, `aws_bedrock`). Traceloop currently emits `gen_ai.system`. DQL filters should check both: `isNotNull(gen_ai.system) or isNotNull(gen_ai.provider.name)`.
+
+**`dt.service.request.count` doesn't exist**
+Those metric names are not in the Dynatrace standard metric schema or OTel spec. Service-level request count tiles should be built from span queries, not from `timeseries` against those metric keys. Decided not worth pursuing further.
+
+**Our gen_ai histogram confirmed correct**
+`gen_ai.client.token.usage` histogram + `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` span attributes match the official Dynatrace Semantic Dictionary exactly.
+
+### What's NOT in This Version
+Everything — no code shipped.
+
+### Migration / Deployment Notes
+None.
+
+### Commits
+None.
+
+### Next Up
+- Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller
+- Dynatrace cost dashboard using `gen_ai.client.token.usage` metric (outside repo)
+
+---
+
 ## Template for Future Sessions
 
 ### Goal

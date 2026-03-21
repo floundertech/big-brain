@@ -1,11 +1,17 @@
 # Session Notes
 
 ## Active branch
-`claude/second-brain-platform-design-lkCxq` (Session 8: gen_ai token usage spans + OTLP metrics, 2026-03-21)
+`claude/second-brain-platform-design-lkCxq` (Session 9: Dynatrace field reference + DQL research, 2026-03-21)
 
 ## Current state (2026-03-21)
 
-Session 8 complete. Added `_record_usage()` helper to `claude.py` — attaches `gen_ai.*` token-usage attributes to the active OTel span after every Anthropic API call, and emits the `gen_ai.client.token.usage` OTLP histogram metric. Key implementation details:
+Session 9 complete. Research/reference session — no code changes. Reviewed the official Dynatrace Global Field Reference to validate the gen_ai span attribute names and DQL query fixes from Session 8. Key confirmations:
+- `span.status_code` legal values are `"ok"` and `"error"` only (null = unset). Session 8's failure-rate DQL fix is spec-correct.
+- `gen_ai.provider.name` is the newer official field (`openai`, `aws_bedrock`). Traceloop currently emits `gen_ai.system` — both should be checked in DQL filters.
+- `dt.service.request.count` / `dt.service.request.failure_count` are not part of any standard Dynatrace or OTel metric schema — those metric names were invented. Service request count tiles should be built from spans, not from those metric names.
+- `gen_ai.client.token.usage` histogram and `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` span attributes confirmed correct per spec.
+
+Session 8 complete. Added `_record_usage()` helper to `claude.py` — attaches `gen_ai.*` token-usage attributes to the active OTel span after every Anthropic API call, and emits the `gen_ai.client.token.usage` OTLP histogram metric. Added `_record_usage()` helper to `claude.py` — attaches `gen_ai.*` token-usage attributes to the active OTel span after every Anthropic API call, and emits the `gen_ai.client.token.usage` OTLP histogram metric. Key implementation details:
 - `gen_ai.usage.input_tokens` — sums `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`
 - `gen_ai.usage.output_tokens`
 - `gen_ai.request.model`, `gen_ai.operation.name`, `gen_ai.response.finish_reasons` set on span
