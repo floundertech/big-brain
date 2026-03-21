@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { api } from "../api";
+import Markdown from "../components/Markdown";
 
 export default function Chat() {
   const [messages, setMessages] = useState([]);
@@ -52,7 +53,7 @@ export default function Chat() {
                   : "bg-neutral-800 text-neutral-200"
               }`}
             >
-              {m.content}
+              {m.role === "assistant" ? <Markdown content={m.content} /> : m.content}
             </div>
           </div>
         ))}
