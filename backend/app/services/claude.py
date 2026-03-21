@@ -2,9 +2,34 @@ import json
 import re
 import asyncio
 import anthropic
+from opentelemetry import trace as _otel_trace
 from ..core.config import settings
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=120.0)
+
+
+def _record_usage(response: anthropic.types.Message, operation: str) -> None:
+    """Attach gen_ai token-usage attributes to the current OTel span.
+
+    No-op when tracing is disabled or no span is active.
+    Anthropic reports cached tokens separately, so we sum all three buckets
+    into gen_ai.usage.input_tokens per the OpenTelemetry gen_ai semantic conventions.
+    """
+    span = _otel_trace.get_current_span()
+    if not span.is_recording():
+        return
+    usage = response.usage
+    input_tokens = (
+        usage.input_tokens
+        + getattr(usage, "cache_read_input_tokens", 0)
+        + getattr(usage, "cache_creation_input_tokens", 0)
+    )
+    span.set_attribute("gen_ai.operation.name", operation)
+    span.set_attribute("gen_ai.request.model", response.model)
+    span.set_attribute("gen_ai.usage.input_tokens", input_tokens)
+    span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens)
+    if response.stop_reason:
+        span.set_attribute("gen_ai.response.finish_reasons", [response.stop_reason])
 
 
 def _parse_json(text: str) -> dict:
@@ -135,6 +160,7 @@ async def enrich_entry(text: str) -> dict:
         max_tokens=512,
         messages=[{"role": "user", "content": _ENRICH_PROMPT.format(text=truncated)}],
     )
+    _record_usage(response, "enrich_entry")
     return _parse_json(response.content[0].text)
 
 
@@ -147,15 +173,18 @@ async def extract_entities(text: str) -> dict:
         max_tokens=256,
         messages=[{"role": "user", "content": _EXTRACT_ENTITIES_PROMPT.format(text=truncated)}],
     )
+    _record_usage(response, "extract_entities")
     return _parse_json(response.content[0].text)
 
 
 def chat_turn(messages: list[dict]) -> anthropic.types.Message:
     """Single Claude turn with tools. Returns the raw Message response."""
-    return client.messages.create(
+    response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=2048,
         system=_AGENTIC_SYSTEM,
         tools=TOOLS,
         messages=messages,
     )
+    _record_usage(response, "chat_turn")
+    return response
