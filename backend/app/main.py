@@ -23,7 +23,15 @@ def _init_tracing():
         disable_batch=False,
     )
 
-    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics import (
+        MeterProvider,
+        Counter,
+        UpDownCounter,
+        Histogram,
+        ObservableCounter,
+        ObservableUpDownCounter,
+        ObservableGauge,
+    )
     from opentelemetry.sdk.metrics.export import (
         AggregationTemporality,
         ConsoleMetricExporter,
@@ -40,13 +48,14 @@ def _init_tracing():
 
     resource = Resource.create({SERVICE_NAME: "big-brain"})
     # Dynatrace requires DELTA temporality — it rejects CUMULATIVE (the OTel default) with 400.
+    # Keys must be instrument classes, not strings.
     _delta = {
-        "Counter": AggregationTemporality.DELTA,
-        "UpDownCounter": AggregationTemporality.CUMULATIVE,
-        "Histogram": AggregationTemporality.DELTA,
-        "ObservableCounter": AggregationTemporality.DELTA,
-        "ObservableUpDownCounter": AggregationTemporality.CUMULATIVE,
-        "ObservableGauge": AggregationTemporality.CUMULATIVE,
+        Counter: AggregationTemporality.DELTA,
+        UpDownCounter: AggregationTemporality.CUMULATIVE,
+        Histogram: AggregationTemporality.DELTA,
+        ObservableCounter: AggregationTemporality.DELTA,
+        ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
+        ObservableGauge: AggregationTemporality.CUMULATIVE,
     }
     otlp_exporter = OTLPMetricExporter(
         endpoint=metrics_endpoint,
