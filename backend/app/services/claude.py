@@ -42,10 +42,88 @@ Rules:
 Text:
 {text}"""
 
-_CHAT_SYSTEM = """You are a knowledgeable assistant with access to the user's personal notes and transcripts.
-Answer questions based on the provided context. Be concise and direct.
-If the context doesn't contain enough information, say so clearly.
-Always ground your answers in the provided notes."""
+TOOLS = [
+    {
+        "name": "search_notes",
+        "description": (
+            "Search the user's personal knowledge base using semantic similarity. "
+            "Use this for questions about what the user knows, discussed, met, or documented. "
+            "Call this first before considering a web search."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Natural language search query"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "get_entity",
+        "description": "Look up a specific person or organization in the knowledge base and see all entries mentioning them.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Name of the person or organization"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "web_search",
+        "description": (
+            "Search the web for current information not in the knowledge base. "
+            "IMPORTANT: Before calling this tool, you MUST send a text message to the user "
+            "explaining what you are about to search for and why. Only call this tool after "
+            "the user has confirmed (e.g. replied 'yes', 'go ahead', 'sure', etc.)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "The search query"},
+                "num_results": {
+                    "type": "integer",
+                    "description": "Number of results to fetch (1–5, default 3)",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "save_entry",
+        "description": (
+            "Save information as a new entry in the knowledge base. "
+            "IMPORTANT: Before calling this tool, you MUST send a text message showing the user "
+            "the title and a 2-sentence summary of what you plan to save, and wait for their "
+            "confirmation before calling this tool."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Full text content to save"},
+                "title": {"type": "string", "description": "Descriptive title for the entry"},
+                "sources": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of source URLs (for web research entries)",
+                },
+            },
+            "required": ["text", "title"],
+        },
+    },
+]
+
+_AGENTIC_SYSTEM = """You are a knowledgeable assistant with access to the user's personal knowledge base and the web.
+
+You have four tools:
+- **search_notes**: searches the user's personal notes semantically. Use this liberally — it's fast and free.
+- **get_entity**: looks up a specific person or organization and their linked notes.
+- **web_search**: searches the web. Costs money. ALWAYS tell the user what you're going to search for and wait for their confirmation before calling this.
+- **save_entry**: saves content to the knowledge base. ALWAYS show the user the title and a 2-sentence summary of what you'll save and wait for their confirmation before calling this.
+
+For most questions: search_notes first, answer from the results.
+For web research: ask for confirmation, then search, then optionally offer to save the results.
+Be concise and direct."""
 
 
 async def enrich_entry(text: str) -> dict:
@@ -72,17 +150,12 @@ async def extract_entities(text: str) -> dict:
     return _parse_json(response.content[0].text)
 
 
-def chat(messages: list[dict], context_entries: list[dict]) -> str:
-    """RAG chat: answer based on retrieved entries."""
-    context_block = "\n\n---\n\n".join(
-        f"[{e['title']}]\n{e['raw_text']}" for e in context_entries
-    )
-    system = _CHAT_SYSTEM + f"\n\n# Your notes:\n\n{context_block}"
-
-    response = client.messages.create(
+def chat_turn(messages: list[dict]) -> anthropic.types.Message:
+    """Single Claude turn with tools. Returns the raw Message response."""
+    return client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1024,
-        system=system,
+        max_tokens=2048,
+        system=_AGENTIC_SYSTEM,
+        tools=TOOLS,
         messages=messages,
     )
-    return response.content[0].text
