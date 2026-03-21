@@ -1,21 +1,24 @@
 # Session Notes
 
 ## Active branch
-`claude/docs-session4-lkCxq` (Session 8: gen_ai token usage spans, 2026-03-21)
+`claude/second-brain-platform-design-lkCxq` (Session 8: gen_ai token usage spans + OTLP metrics, 2026-03-21)
 
 ## Current state (2026-03-21)
 
-Session 8 complete. Added `_record_usage()` helper to `claude.py` — attaches `gen_ai.*` token-usage attributes to the active OTel span after every Anthropic API call, and emits the `gen_ai.client.token.usage` OTLP histogram metric:
+Session 8 complete. Added `_record_usage()` helper to `claude.py` — attaches `gen_ai.*` token-usage attributes to the active OTel span after every Anthropic API call, and emits the `gen_ai.client.token.usage` OTLP histogram metric. Key implementation details:
 - `gen_ai.usage.input_tokens` — sums `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`
 - `gen_ai.usage.output_tokens`
-- `gen_ai.request.model`, `gen_ai.operation.name`, `gen_ai.response.finish_reasons`
+- `gen_ai.request.model`, `gen_ai.operation.name`, `gen_ai.response.finish_reasons` set on span
 - `gen_ai.client.token.usage` histogram (OTLP metric) — one record per token type (`input`/`output`), tagged with operation and model
-- No-op span guard when tracing is disabled; histogram always emits if OTel metrics exporter is configured
+- Span attributes and histogram recording are now **independent** — span guard only gates attribute setting, not metric recording
+- `MeterProvider` is owned directly (not via global OTel API) to prevent Traceloop from overriding it on first request
+- `core/telemetry.py` holds the histogram reference to avoid circular imports
+- `force_flush()` + `shutdown()` called in lifespan teardown so buffered metrics aren't lost on container restart
 - Applied to all three call sites: `enrich_entry`, `extract_entities`, `chat_turn`
 
-Session 7 complete + confirmed working. Auto-instrumentation via OpenLLMetry (Traceloop) for Dynatrace. Token/cost data now visible via custom span attributes.
+**Dynatrace gotcha found this session:** The built-in AI Observability failure-rate tile uses `isNull(span.status_code)` for success. Traceloop sets `span.status_code = "ok"` on successful spans, causing 100% false failure rate. Fix the DQL query: `success=countIf(isNull(span.status_code) or span.status_code == "ok")`.
 
-Previous sessions: Chunk RAG + Tavily fix, Layer 2e Agentic Chat, Layer 2 Entity Model, async fix, OOM fix, markdown rendering.
+Session 7 complete + confirmed working. Auto-instrumentation via OpenLLMetry (Traceloop) for Dynatrace.
 
 Previous sessions: Chunk RAG + Tavily fix, Layer 2e Agentic Chat, Layer 2 Entity Model, async fix, OOM fix, markdown rendering.
 
