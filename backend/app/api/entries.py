@@ -6,7 +6,8 @@ from pydantic import BaseModel
 from ..core.database import get_db
 from ..core.models import Entry
 from ..services.embeddings import embed
-from ..services.claude import enrich_entry
+from ..services.claude import enrich_entry, extract_entities
+from ..services.entities import link_entities_to_entry
 
 router = APIRouter(prefix="/entries", tags=["entries"])
 
@@ -33,7 +34,7 @@ async def create_entry(
     source_type: str = Form("note"),
     db: AsyncSession = Depends(get_db),
 ):
-    enriched = enrich_entry(text)
+    enriched = await enrich_entry(text)
     vec = embed(text)
     entry = Entry(
         title=enriched["title"],
@@ -46,6 +47,9 @@ async def create_entry(
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+    extracted = await extract_entities(text)
+    await link_entities_to_entry(db, entry.id, extracted)
+    await db.commit()
     return entry
 
 
@@ -57,7 +61,7 @@ async def upload_entry(
 ):
     content = await file.read()
     text = content.decode("utf-8", errors="replace")
-    enriched = enrich_entry(text)
+    enriched = await enrich_entry(text)
     vec = embed(text)
     entry = Entry(
         title=enriched.get("title", file.filename or "Untitled"),
@@ -70,6 +74,9 @@ async def upload_entry(
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+    extracted = await extract_entities(text)
+    await link_entities_to_entry(db, entry.id, extracted)
+    await db.commit()
     return entry
 
 

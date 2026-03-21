@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, DateTime, ARRAY
+from sqlalchemy import String, Text, DateTime, ARRAY, Integer, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
 from .database import Base
@@ -24,3 +24,27 @@ class Entry(Base):
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     embedding: Mapped[list[float]] = mapped_column(Vector(settings.embed_dim), nullable=True)
+
+
+class Entity(Base):
+    __tablename__ = "entities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(50))  # "person" | "organization"
+    name: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (UniqueConstraint("entity_type", "name", name="uq_entity_type_name"),)
+
+
+class EntryEntity(Base):
+    __tablename__ = "entry_entities"
+
+    entry_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("entries.id", ondelete="CASCADE"), primary_key=True
+    )
+    entity_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("entities.id", ondelete="CASCADE"), primary_key=True
+    )

@@ -2,12 +2,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.database import init_db
-from .api import entries, search, chat
+from .services.embeddings import get_model
+from .api import entries, search, chat, entities
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    get_model()  # pre-load embedding model at startup to avoid OOM spike mid-request
     yield
 
 
@@ -23,6 +25,7 @@ app.add_middleware(
 app.include_router(entries.router)
 app.include_router(search.router)
 app.include_router(chat.router)
+app.include_router(entities.router)
 
 
 @app.get("/health")

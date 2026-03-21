@@ -39,4 +39,11 @@ export const api = {
   },
   search: (q, limit = 10) => req("GET", `/search/?q=${encodeURIComponent(q)}&limit=${limit}`),
   chat: (messages, top_k = 5) => req("POST", "/chat/", { messages, top_k }),
+  entities: {
+    list: (params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null)).toString();
+      return req("GET", `/entities/${qs ? "?" + qs : ""}`);
+    },
+    get: (id) => req("GET", `/entities/${id}`),
+  },
 };

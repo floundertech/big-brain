@@ -1,0 +1,181 @@
+# Session Summaries
+
+## Session 1: Entity Model Implementation (2026-03-20)
+
+### Goal
+Implement full entity model layer (DB → extraction → API → frontend pages) with Person and Organization entity types.
+
+### What Got Built
+
+**Backend: 5 files touched/created**
+- `models.py`: `Entity` table (type, name, unique constraint) + `EntryEntity` join table with cascade deletes
+- `claude.py`: `extract_entities()` — focused second Claude call per ingest, returns `{people: [], organizations: []}`
+- `services/entities.py`: async upsert-and-link helper using `INSERT ... ON CONFLICT DO NOTHING` pattern
+- `api/entities.py`: two endpoints:
+  - `GET /entities/` — list all, filterable by `entity_type` or `entry_id`
+  - `GET /entities/{id}` — entity detail with full entry list
+- `entries.py`: wired extraction into both `create_entry` and `upload_entry` handlers
+- `main.py`: registered entities router
+
+**Frontend: 4 files touched/created**
+- `api.js`: added `entities.list(params)` and `entities.get(id)`
+- `EntityDetail.jsx`: new page — entity name, type badge, all linked entries
+- `EntryDetail.jsx`: entity pills below tags, violet for people, amber for orgs, clickable to entity page
+- `App.jsx`: added `/entity/:id` route
+
+### Key Design Decisions
+
+**Single vs. Multiple Tables**
+- One `entities` table with `entity_type` discriminator column, not separate tables
+- Simpler to query, extend (adding Project = no schema change), and reason about
+- Unique constraint on `(entity_type, name)` provides the same protection
+
+**Separate Extraction Call**
+- Added second Claude call per ingest (dedicated to entity extraction only)
+- Cost is minimal (256 token limit, very focused prompt)
+- Keeps extraction logic isolated and independently tunable
+- Alternative was merging into `_ENRICH_PROMPT`, but that risks prompt confusion
+
+**Upsert Pattern**
+- Used `INSERT ... ON CONFLICT DO NOTHING` instead of SELECT-then-INSERT
+- Prevents race conditions in concurrent requests
+- Native to PostgreSQL, clean and efficient
+
+**Entity Pages vs. Inline Embedding**
+- Entity pills are clickable links to dedicated pages, not inline expandable sections
+- Keeps entry detail page lightweight and focused
+- Entity pages are read-only for now (no manual entity editing UI)
+
+**Filtering API**
+- `GET /entities/?entry_id=123` to fetch entities for a specific entry
+- Alternative was embedding entities in the entry response, but that changes `EntryOut` Pydantic model
+- This approach keeps all existing endpoints 100% unchanged
+
+### What's NOT in V2
+
+- No extended entity fields (roles, relationships, org context) — schema starts minimal
+- No manual entity creation/editing UI — entities are auto-created by extraction only
+- No Project or Topic entities yet — Foundation is Person and Organization only
+- No linking entities to each other (person→org relationships come next)
+
+### Migration / Deployment Notes
+
+- New tables auto-created on next `docker compose up` via existing `create_all` pattern
+- No Alembic or manual migrations needed
+- Existing entry endpoints and frontend pages work unchanged
+- All entity functionality is additive — no breaking changes
+
+### Commits
+
+- `3b9aeff` — Add entity model: Person + Organization extraction and pages
+- `b89bd7b` — Update docs: mark Layer 2 (Entity Model) complete, add session summary
+- `e250fb5` — Docs: add Research/Enrichment feature design (Layer 2c)
+- `6d56b87` — Docs: add source provenance requirement to Research feature design
+- `9d09717` — Update README, requirements, and .env.example for V2
+
+### Next Up
+
+Layer 2c: Research/Enrichment implementation. Design is complete (see BIGBRAIN.md). Two entry points: Entity page "Enrich" button + standalone Research page. Output saved as `source_type: "research"` entries with source URL provenance. Layer 2b (typed tags) deferred until after gaining more entity usage patterns.
+
+---
+
+## Session 2: Async fix + JSON parsing hardening (2026-03-20)
+
+### Goal
+Fix `500 Internal Server Error` on `/entries/upload` caused by two bugs introduced during entity model work.
+
+### What Got Built
+
+**`backend/app/services/claude.py`** — 2 changes:
+- Added `_parse_json()` helper: strips ` ```json ` / ` ``` ` markdown fences before calling `json.loads()`. Claude occasionally wraps JSON responses in code fences, which caused `JSONDecodeError` crashes.
+- Made `enrich_entry()` and `extract_entities()` `async` using `asyncio.to_thread()`. The sync Anthropic client was being called directly in an async FastAPI handler, which blocks the event loop.
+
+**`backend/app/api/entries.py`** — added `await` to both `enrich_entry()` and `extract_entities()` calls in `create_entry` and `upload_entry`.
+
+**`CLAUDE.md`** — expanded from stub to full session context doc.
+
+**`README.md`** — added "500 on every upload" troubleshooting entry with diagnosis and fix commands.
+
+### Key Design Decisions
+
+**asyncio.to_thread vs. AsyncAnthropic**
+Used `asyncio.to_thread` wrapping the sync client rather than switching to `AsyncAnthropic`. Keeps the client instantiation simple (one client at module level) and avoids changing the `chat()` function which is called from a sync context. Can migrate to `AsyncAnthropic` later if needed.
+
+**_parse_json as a shared helper**
+Both `enrich_entry` and `extract_entities` need the same stripping logic. Centralizing it means one place to adjust if Claude's formatting behavior changes.
+
+### What's NOT in This Version
+- No retry logic on Claude API failures
+- `chat()` remains synchronous (it's called from a sync route handler and doesn't need async yet)
+
+### Migration / Deployment Notes
+- Drop-in replacement: no DB changes, no new env vars
+- Restart backend container to pick up the fix: `docker compose up -d --build backend`
+
+### Commits
+- `f2e277d` — Fix transcript upload failing due to Claude returning markdown-wrapped JSON
+
+### Next Up
+Layer 2c: Research/Enrichment. Design is complete in BIGBRAIN.md.
+
+---
+
+## Session 3: OOM fix + startup import fix (2026-03-20)
+
+### Goal
+Diagnose and fix backend container crashing with exit code 137 on first large `.txt` upload, and a follow-on `NameError` that broke startup entirely.
+
+### What Got Built
+
+**`backend/app/main.py`** — 2 changes:
+- Added `get_model()` call inside `lifespan()` startup hook. The fastembed `nomic-embed-text-v1.5` model was lazily loaded on first request; when a large upload arrived the combined memory spike (file + model load + Claude response) OOM-killed the container (exit 137). Pre-loading at startup settles the model into RAM before any request can arrive.
+- Restored `from .api import entries, search, chat, entities` import line that was silently dropped by the linter during the previous fix, causing `NameError: name 'entries' is not defined` on every startup.
+
+### Key Design Decisions
+
+**Pre-warm vs. switch model**
+Pre-warming at startup is the minimal fix: it doesn't change model quality or vector dimensions, and it keeps the existing `embed_cache` volume working. Switching to a lighter model (`bge-small-en-v1.5`) is documented as a fallback for hosts with <1 GB free RAM.
+
+**No memory limit added to Compose**
+Adding `mem_limit` to docker-compose.yml would just make the OOM fail faster with a cleaner error, not prevent it. Pre-warming is the actual fix.
+
+### What's NOT in This Version
+- No fallback/retry on embed failure
+- No streaming or chunked processing for very large files
+
+### Migration / Deployment Notes
+- Pull latest, `docker compose up --build -d`
+- No DB changes, no new env vars
+- First startup is slower (model loads before the server accepts requests) — this is expected and healthy
+
+### Commits
+- `ab5d4be` — Pre-warm embedding model at startup to prevent OOM on large uploads
+- `2fc9756` — Fix missing api router imports dropped by linter
+
+### Next Up
+Layer 2c: Research/Enrichment. Design is complete in BIGBRAIN.md.
+
+---
+
+## Template for Future Sessions
+
+### Goal
+[What are we trying to accomplish?]
+
+### What Got Built
+[Files changed, features delivered]
+
+### Key Design Decisions
+[Why we chose X over Y]
+
+### What's NOT in This Version
+[Deliberately deferred, future layers]
+
+### Migration / Deployment Notes
+[How does this ship? Any setup steps?]
+
+### Commits
+[Hash — message]
+
+### Next Up
+[What's the logical next step?]

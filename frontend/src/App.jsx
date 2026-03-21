@@ -4,6 +4,7 @@ import Ingest from "./pages/Ingest";
 import Search from "./pages/Search";
 import Chat from "./pages/Chat";
 import EntryDetail from "./pages/EntryDetail";
+import EntityDetail from "./pages/EntityDetail";
 
 const nav = [
   { to: "/", label: "Browse" },
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/search" element={<Search />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/entry/:id" element={<EntryDetail />} />
+          <Route path="/entity/:id" element={<EntityDetail />} />
         </Routes>
       </main>
     </div>
