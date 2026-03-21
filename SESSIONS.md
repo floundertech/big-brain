@@ -267,7 +267,8 @@ docker compose up -d --build backend
 ```
 
 ### Commits
-- (see git log)
+- `565cb97` — Design: Gmail connector (Layer 2d) + Agentic Chat (Layer 2e)
+- `6714a6d` — feat: agentic chat with tool use (Layer 2e)
 
 ### Next Up
 - Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller
