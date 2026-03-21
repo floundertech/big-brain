@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -5,6 +6,8 @@ from .core.database import init_db
 from .core.config import settings
 from .services.embeddings import get_model
 from .api import entries, search, chat, entities
+
+logger = logging.getLogger("big-brain.telemetry")
 
 
 def _init_tracing():
@@ -21,17 +24,28 @@ def _init_tracing():
     )
 
     from opentelemetry.sdk.metrics import MeterProvider
-    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+    from opentelemetry.sdk.metrics.export import (
+        ConsoleMetricExporter,
+        PeriodicExportingMetricReader,
+    )
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
     from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 
+    # Enable OTel SDK logging so export errors are visible in container logs
+    logging.getLogger("opentelemetry").setLevel(logging.DEBUG)
+
+    metrics_endpoint = f"{settings.dt_otlp_endpoint.rstrip('/')}/v1/metrics"
+    logger.warning("OTLP metrics endpoint: %s", metrics_endpoint)
+
     resource = Resource.create({SERVICE_NAME: "big-brain"})
-    exporter = OTLPMetricExporter(
-        endpoint=f"{settings.dt_otlp_endpoint.rstrip('/')}/v1/metrics",
+    otlp_exporter = OTLPMetricExporter(
+        endpoint=metrics_endpoint,
         headers=auth_headers,
     )
-    reader = PeriodicExportingMetricReader(exporter, export_interval_millis=15_000)
-    provider = MeterProvider(resource=resource, metric_readers=[reader])
+    otlp_reader = PeriodicExportingMetricReader(otlp_exporter, export_interval_millis=15_000)
+    # Console exporter dumps metric data to stdout — visible in `docker compose logs backend`
+    console_reader = PeriodicExportingMetricReader(ConsoleMetricExporter(), export_interval_millis=15_000)
+    provider = MeterProvider(resource=resource, metric_readers=[otlp_reader, console_reader])
     # Create the histogram directly from our owned provider — do NOT use the
     # global set_meter_provider() API, which Traceloop may override on first request.
     hist = provider.get_meter("big-brain.claude").create_histogram(
@@ -41,6 +55,7 @@ def _init_tracing():
     )
     from .core.telemetry import set_token_usage_histogram
     set_token_usage_histogram(hist)
+    logger.warning("MeterProvider initialized, histogram registered")
     return provider
 
 

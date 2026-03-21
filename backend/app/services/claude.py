@@ -1,10 +1,13 @@
 import json
+import logging
 import re
 import asyncio
 import anthropic
 from opentelemetry import trace as _otel_trace
 from ..core.config import settings
 from ..core.telemetry import get_token_usage_histogram
+
+logger = logging.getLogger("big-brain.claude")
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=120.0)
 
@@ -37,6 +40,12 @@ def _record_usage(response: anthropic.types.Message, operation: str) -> None:
     if hist is not None:
         hist.record(input_tokens, {**attrs, "gen_ai.token.type": "input"})
         hist.record(usage.output_tokens, {**attrs, "gen_ai.token.type": "output"})
+        logger.warning(
+            "histogram.record: op=%s input=%d output=%d",
+            operation, input_tokens, usage.output_tokens,
+        )
+    else:
+        logger.warning("histogram is None — MeterProvider not initialized?")
 
 
 def _parse_json(text: str) -> dict:
