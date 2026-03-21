@@ -37,12 +37,27 @@ class ChatResponse(BaseModel):
 
 async def _search_notes(query: str, db: AsyncSession, top_k: int = 5) -> tuple[str, list[dict]]:
     vec = embed(query)
+    # Search chunks (properly indexed entries) plus fallback for legacy entries without chunks
     result = await db.execute(
         text("""
-            SELECT id, title, raw_text, tags,
-                   1 - (embedding <=> CAST(:vec AS vector)) AS score
-            FROM entries
-            ORDER BY embedding <=> CAST(:vec AS vector)
+            (
+                SELECT e.id, e.title, c.text AS snippet,
+                       1 - (c.embedding <=> CAST(:vec AS vector)) AS score
+                FROM chunks c
+                JOIN entries e ON e.id = c.entry_id
+                ORDER BY c.embedding <=> CAST(:vec AS vector)
+                LIMIT :k
+            )
+            UNION ALL
+            (
+                SELECT e.id, e.title, LEFT(e.raw_text, 2000) AS snippet,
+                       1 - (e.embedding <=> CAST(:vec AS vector)) AS score
+                FROM entries e
+                WHERE NOT EXISTS (SELECT 1 FROM chunks c WHERE c.entry_id = e.id)
+                ORDER BY e.embedding <=> CAST(:vec AS vector)
+                LIMIT :k
+            )
+            ORDER BY score DESC
             LIMIT :k
         """),
         {"vec": str(vec), "k": top_k},
@@ -51,7 +66,7 @@ async def _search_notes(query: str, db: AsyncSession, top_k: int = 5) -> tuple[s
     if not rows:
         return "No matching notes found.", []
     formatted = "\n\n---\n\n".join(
-        f"[{r['title']}] (score: {r['score']:.2f})\n{r['raw_text'][:1500]}" for r in rows
+        f"[{r['title']}] (score: {r['score']:.2f})\n{r['snippet']}" for r in rows
     )
     sources = [{"id": r["id"], "title": r["title"], "score": r["score"]} for r in rows]
     return formatted, sources

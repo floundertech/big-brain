@@ -49,3 +49,15 @@ class EntryEntity(Base):
     entity_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("entities.id", ondelete="CASCADE"), primary_key=True
     )
+
+
+class Chunk(Base):
+    __tablename__ = "chunks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entry_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("entries.id", ondelete="CASCADE"), index=True
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float]] = mapped_column(Vector(settings.embed_dim), nullable=True)

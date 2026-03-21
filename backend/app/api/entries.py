@@ -4,12 +4,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from pydantic import BaseModel
 from ..core.database import get_db
-from ..core.models import Entry
-from ..services.embeddings import embed
+from ..core.models import Entry, Chunk
+from ..services.embeddings import embed, chunk_text
 from ..services.claude import enrich_entry, extract_entities
 from ..services.entities import link_entities_to_entry
 
 router = APIRouter(prefix="/entries", tags=["entries"])
+
+
+async def _create_chunks(db: AsyncSession, entry_id: int, text: str) -> None:
+    for i, chunk in enumerate(chunk_text(text)):
+        db.add(Chunk(entry_id=entry_id, chunk_index=i, text=chunk, embedding=embed(chunk)))
 
 
 class EntryOut(BaseModel):
@@ -47,6 +52,7 @@ async def create_entry(
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+    await _create_chunks(db, entry.id, text)
     extracted = await extract_entities(text)
     await link_entities_to_entry(db, entry.id, extracted)
     await db.commit()
@@ -74,10 +80,25 @@ async def upload_entry(
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+    await _create_chunks(db, entry.id, text)
     extracted = await extract_entities(text)
     await link_entities_to_entry(db, entry.id, extracted)
     await db.commit()
     return entry
+
+
+@router.post("/reindex", status_code=200)
+async def reindex_entries(db: AsyncSession = Depends(get_db)):
+    """Backfill chunks for any entries that were ingested before chunking was added."""
+    from sqlalchemy import select as sa_select, text as sa_text
+    result = await db.execute(
+        sa_text("SELECT id, raw_text FROM entries WHERE id NOT IN (SELECT DISTINCT entry_id FROM chunks)")
+    )
+    rows = result.fetchall()
+    for entry_id, raw_text in rows:
+        await _create_chunks(db, entry_id, raw_text)
+    await db.commit()
+    return {"reindexed": len(rows)}
 
 
 @router.get("/", response_model=list[EntryOut])
