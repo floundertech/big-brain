@@ -106,7 +106,7 @@ List all entries, filterable by source type. Click any entry to view full detail
 Semantic vector search — finds conceptually relevant entries, not just keyword matches. Powered by local embeddings (no external API calls).
 
 ### Chat
-RAG chat: ask questions in plain English, Claude answers using your notes as context and cites which entries it pulled from.
+Agentic chat: Claude searches your notes, looks up entities, and optionally searches the web or saves new entries. For local knowledge questions it searches silently and answers directly. For web research it asks before searching (to keep costs visible), and asks before saving anything.
 
 ### Entities
 People and organizations are extracted automatically from every entry and stored as first-class entities.
@@ -133,6 +133,7 @@ People and organizations are extracted automatically from every entry and stored
 | `POSTGRES_PASSWORD` | No | `changeme` | Change before exposing to network |
 | `VITE_API_URL` | No | `http://localhost:8000` | Set to server IP for LAN access |
 | `EMBED_MODEL` | No | `nomic-ai/nomic-embed-text-v1.5` | Override embedding model |
+| `TAVILY_API_KEY` | No | — | Enables web search in chat. Free plan at tavily.com (1,000 searches/month). |
 
 ---
 
@@ -228,6 +229,15 @@ Then wipe the DB (vectors are stored at a fixed dimension and must match) and re
 ```bash
 docker compose down -v
 docker compose up -d --build
+```
+
+**Chat web search returns "Tavily API key not configured"**
+Set `TAVILY_API_KEY=tvly-...` in `.env` (free plan at tavily.com), then restart the backend: `docker compose up -d --build backend`.
+
+**Updating from a version before agentic chat (meta column missing)**
+The `meta` column was added to `entries` in Layer 2e. If you're updating an existing install, run this once:
+```bash
+docker compose exec db psql -U postgres bigbrain -c "ALTER TABLE entries ADD COLUMN IF NOT EXISTS meta jsonb;"
 ```
 
 **Wipe everything and start fresh**

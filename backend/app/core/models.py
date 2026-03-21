@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, DateTime, ARRAY, Integer, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Text, DateTime, ARRAY, Integer, ForeignKey, UniqueConstraint, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
 from .database import Base
@@ -24,6 +24,7 @@ class Entry(Base):
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     embedding: Mapped[list[float]] = mapped_column(Vector(settings.embed_dim), nullable=True)
+    meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # e.g. {"sources": ["url1", ...]}
 
 
 class Entity(Base):

@@ -199,6 +199,82 @@ Layer 2c: Research/Enrichment. Design is complete in BIGBRAIN.md.
 
 ---
 
+## Session 5: Agentic Chat (Layer 2e) (2026-03-21)
+
+### Goal
+Replace the static RAG chat with a tool-using agent. Claude can now search notes, look up entities, search the web, and save new entries — all from the chat interface.
+
+### What Got Built
+
+**Backend: 4 files touched, 1 created**
+- `backend/app/core/config.py`: added optional `tavily_api_key` setting
+- `backend/app/core/models.py`: added `meta` JSON column to `Entry` for storing web source URLs
+- `backend/app/services/tavily.py`: new — Tavily web search wrapper (`web_search(query, num_results)`)
+- `backend/app/services/claude.py`: replaced `chat()` with `chat_turn()` (returns raw `Message` response); added `TOOLS` list (4 tools) + `_AGENTIC_SYSTEM` prompt
+- `backend/app/api/chat.py`: full rewrite — agentic loop (up to 10 iterations), 4 tool implementations, inline entry saving pipeline
+
+**Frontend: no changes.** Chat UI is identical — same input box, same message thread, same `sources` display.
+
+**Design docs**
+- `BIGBRAIN.md`: added Layer 2d (Gmail) + Layer 2e (Agentic Chat) design specs, updated data model and roadmap
+
+### Key Design Decisions
+
+**claude.py stays thin; chat.py orchestrates**
+`chat_turn()` in claude.py is one Claude API call. The agentic loop, tool dispatch, and DB writes all live in `chat.py`. This keeps claude.py as a service layer (API calls only) and keeps the orchestration close to the route handler where the DB session lives.
+
+**asyncio.to_thread for the sync Anthropic client**
+Same pattern as `enrich_entry` / `extract_entities`. No migration to AsyncAnthropic needed.
+
+**Confirmation protocol in the system prompt, not the server**
+Claude is instructed to ask before calling `web_search` or `save_entry`. No server-side state tracking. Works naturally with multi-turn message history — user says "yes" → next request Claude sees the confirmation and calls the tool. Simple, no extra infrastructure.
+
+**`meta` not `metadata` on the model**
+SQLAlchemy's `Base` class has a class-level `metadata` attribute. Using `meta` as the Python attribute name avoids the conflict while mapping to a `metadata` column in DB (using the column name param). Actually, we use `meta` as both the Python attribute and column name for simplicity.
+
+**save_entry runs enrichment post-save**
+The entry is committed first (with the agent's title), then `enrich_entry` runs for summary + better tags. If enrichment fails, the entry still exists with the agent's title and no summary. Entity extraction runs after enrichment regardless.
+
+**Tavily as web search provider**
+Designed for LLM agents — returns extracted text content, not raw HTML. Free plan (1,000 searches/month) sufficient for personal use. Completely optional: if `TAVILY_API_KEY` is unset, the tool returns an error message and Claude gracefully reports it can't search.
+
+### What's NOT in This Version
+- No streaming (still request/response, whole answer returned at once)
+- No UI indicator that Claude is using tools (just "Thinking..." during the full agentic loop)
+- `meta` column won't auto-add to existing DBs — requires manual `ALTER TABLE` (see migration notes)
+- Research page (Layer 2c) is now redundant; deferred/cancelled
+- Gmail connector (Layer 2d) not started
+
+### Migration / Deployment Notes
+**Existing DB:** The `meta` column is new. `create_all` won't add it to an existing table. Run manually:
+```sql
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS meta jsonb;
+```
+Or wipe and rebuild (losing data):
+```bash
+docker compose down -v && docker compose up -d --build
+```
+
+**New env var (optional):**
+```env
+TAVILY_API_KEY=tvly-...   # from tavily.com, free plan
+```
+Without it, web search gracefully fails with a message. All other functionality works.
+
+**Rebuild backend:**
+```bash
+docker compose up -d --build backend
+```
+
+### Commits
+- (see git log)
+
+### Next Up
+- Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller
+- UI polish: tool-use indicator while agent is working, saved entry link in chat response
+
+---
+
 ## Template for Future Sessions
 
 ### Goal
