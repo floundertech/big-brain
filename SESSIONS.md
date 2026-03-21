@@ -402,6 +402,66 @@ Basic LLM telemetry verified visible in Dynatrace after the dependency fix.
 
 ---
 
+## Session 8: gen_ai Token Usage Spans + OTLP Metrics (2026-03-21)
+
+### Goal
+Surface token counts and model metadata in Dynatrace so cost can be tracked per operation. Auto-instrumentation gives span visibility but not token-level detail, and `timeseries` DQL queries need a real OTLP metric — not just span attributes.
+
+### What Got Built
+
+**Backend: 3 files changed, 1 new file**
+- `backend/app/services/claude.py`: added `_record_usage(response, operation)` helper called after every `client.messages.create` in `enrich_entry`, `extract_entities`, and `chat_turn`. Sets `gen_ai.*` span attributes and records `gen_ai.client.token.usage` histogram. Span attributes and histogram are independent — span guard only blocks attribute setting, not metric recording.
+- `backend/app/core/telemetry.py` *(new)*: thin module holding the histogram instance. Avoids circular imports between `main.py` and `claude.py`, and decouples histogram from the global OTel metrics API.
+- `backend/app/main.py`: `_init_tracing()` now creates and owns a `MeterProvider` with `OTLPMetricExporter` + `Resource(service.name="big-brain")`. Histogram is created directly from this owned provider (not via global API). Lifespan teardown calls `force_flush()` + `shutdown()`. Export interval: 15s.
+- `backend/requirements.txt`: pinned `opentelemetry-exporter-otlp-proto-http>=1.0.0` explicitly.
+
+### Key Design Decisions
+
+**Own the MeterProvider instance; don't use `set_meter_provider()`**
+Traceloop does lazy initialization — when the first instrumented request arrives, it calls `set_meter_provider()` internally, silently replacing any global provider we'd set at startup. By keeping a direct reference to our `MeterProvider` and creating the histogram from it, we're immune to this override.
+
+**`core/telemetry.py` as the histogram holder**
+`main.py` creates the histogram; `claude.py` needs it. Direct import in either direction is circular. The `core/telemetry.py` module is a neutral holder with `set_token_usage_histogram()` / `get_token_usage_histogram()` — no business logic, no imports from either side.
+
+**Summing all Anthropic token buckets**
+Anthropic splits tokens into `input_tokens`, `cache_read_input_tokens`, and `cache_creation_input_tokens`. The OTel gen_ai convention has a single `gen_ai.usage.input_tokens` field, so all three are summed. Accurate cost math: cache reads are cheaper but still count against quota.
+
+**Span attributes and histogram are independent signal types**
+Metrics should emit even without an active trace span. The `is_recording()` guard only wraps the `span.set_attribute()` calls; histogram `.record()` always runs (if the provider is configured).
+
+### What's NOT in This Version
+- No cost calculation in-app (DQL in Dynatrace can multiply token counts × per-token price)
+- No `@workflow` / `@task` decorators on the agentic loop iterations
+- No per-tool-call token breakdown (all tokens in a chat turn are aggregated at the `chat_turn` level)
+- Dynatrace cost dashboard/notebook is out-of-repo work (separate session)
+
+### Dynatrace Gotcha Discovered
+The built-in AI Observability failure-rate tile uses `isNull(span.status_code)` as its success condition. Traceloop sets `span.status_code = "ok"` on all successful spans (valid per OTel spec), which causes 100% false failure rate on the built-in tile. Fix by cloning the dashboard tile and updating the DQL:
+```dql
+success=countIf(isNull(span.status_code) or span.status_code == "ok")
+```
+This appears to be a bug in the Dynatrace built-in query — worth filing with DT support.
+
+### Migration / Deployment Notes
+No DB changes, no new env vars. Rebuild backend:
+```bash
+docker compose up -d --build backend
+```
+OTLP metrics appear in Dynatrace within ~15 seconds of the first Claude API call after rebuild. Query: `timeseries t=sum(gen_ai.client.token.usage), by:{gen_ai.token.type, gen_ai.operation.name}`.
+
+### Commits
+- `a792e91` — feat: emit gen_ai token-usage attributes on OTel spans for Dynatrace cost visibility
+- `3ee534e` — feat: emit gen_ai.client.token.usage histogram metric for Dynatrace cost dashboards
+- `a38e42d` — fix: wire up MeterProvider so gen_ai.client.token.usage metrics actually export
+- `674920c` — fix: two bugs preventing gen_ai.client.token.usage from reaching Dynatrace
+- `79f5b7f` — fix: bypass global OTel metrics API to prevent Traceloop from overriding MeterProvider
+
+### Next Up
+- Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller
+- DQL cost dashboard in Dynatrace (outside the repo — separate session)
+
+---
+
 ## Template for Future Sessions
 
 ### Goal

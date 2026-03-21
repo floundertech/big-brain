@@ -9,22 +9,50 @@ from .api import entries, search, chat, entities
 
 def _init_tracing():
     if not settings.dt_otlp_endpoint or not settings.dt_api_token:
-        return
+        return None
+    auth_headers = {"Authorization": f"Api-Token {settings.dt_api_token}"}
+
     from traceloop.sdk import Traceloop
     Traceloop.init(
         app_name="big-brain",
         api_endpoint=settings.dt_otlp_endpoint,
-        headers={"Authorization": f"Api-Token {settings.dt_api_token}"},
+        headers=auth_headers,
         disable_batch=False,
     )
+
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+
+    resource = Resource.create({SERVICE_NAME: "big-brain"})
+    exporter = OTLPMetricExporter(
+        endpoint=f"{settings.dt_otlp_endpoint.rstrip('/')}/v1/metrics",
+        headers=auth_headers,
+    )
+    reader = PeriodicExportingMetricReader(exporter, export_interval_millis=15_000)
+    provider = MeterProvider(resource=resource, metric_readers=[reader])
+    # Create the histogram directly from our owned provider — do NOT use the
+    # global set_meter_provider() API, which Traceloop may override on first request.
+    hist = provider.get_meter("big-brain.claude").create_histogram(
+        "gen_ai.client.token.usage",
+        unit="{token}",
+        description="Number of tokens used in gen_ai API calls",
+    )
+    from .core.telemetry import set_token_usage_histogram
+    set_token_usage_histogram(hist)
+    return provider
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _init_tracing()
+    meter_provider = _init_tracing()
     await init_db()
     get_model()  # pre-load embedding model at startup to avoid OOM spike mid-request
     yield
+    if meter_provider is not None:
+        meter_provider.force_flush()
+        meter_provider.shutdown()
 
 
 app = FastAPI(title="Big Brain API", lifespan=lifespan)

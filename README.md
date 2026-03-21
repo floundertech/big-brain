@@ -141,7 +141,7 @@ People and organizations are extracted automatically from every entry and stored
 | `EMBED_MODEL` | No | `nomic-ai/nomic-embed-text-v1.5` | Override embedding model |
 | `TAVILY_API_KEY` | No | — | Enables web search in chat. Free plan at tavily.com (1,000 searches/month). |
 | `DT_OTLP_ENDPOINT` | No | — | Dynatrace OTLP endpoint for LLM tracing. Format: `https://{env-id}.live.dynatrace.com/api/v2/otlp` |
-| `DT_API_TOKEN` | No | — | Dynatrace API token. Needs scopes: `openTelemetryTrace.ingest`, `metrics.ingest`, `logs.ingest`. Both this and `DT_OTLP_ENDPOINT` must be set to enable tracing. |
+| `DT_API_TOKEN` | No | — | Dynatrace API token. Needs scopes: `openTelemetryTrace.ingest`, `metrics.ingest`, `logs.ingest`. Both this and `DT_OTLP_ENDPOINT` must be set to enable tracing. When enabled, each Anthropic call emits span attributes (`gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.request.model`) **and** the `gen_ai.client.token.usage` OTLP histogram metric, queryable via `timeseries t=sum(gen_ai.client.token.usage)`. |
 
 ---
 
@@ -266,6 +266,15 @@ git pull && docker compose up -d --build backend
 Check that both `DT_OTLP_ENDPOINT` and `DT_API_TOKEN` are set in `.env` and forwarded to the container. Confirm the token has `openTelemetryTrace.ingest` scope. Check backend logs on startup — Traceloop logs whether it initialized successfully:
 ```bash
 docker compose logs backend | grep -i traceloop
+```
+
+**`gen_ai.client.token.usage` metric not appearing / `timeseries` query returns empty**
+The metric is exported via a separate `MeterProvider` (not Traceloop). Check that `DT_API_TOKEN` also has `metrics.ingest` scope. Metrics flush every 15 seconds — wait at least 15s after a Claude API call before querying. On restart, buffered metrics are force-flushed during lifespan shutdown.
+
+**Dynatrace AI Observability tile shows 100% failure rate**
+This is a bug in the built-in tile. Its DQL uses `isNull(span.status_code)` as the success condition, but Traceloop correctly sets `span.status_code = "ok"` on successful spans, which the query misreads as failure. Clone the dashboard tile and change the condition to:
+```dql
+success=countIf(isNull(span.status_code) or span.status_code == "ok")
 ```
 
 **Chat search misses content in long transcripts (entries ingested before Session 6)**
