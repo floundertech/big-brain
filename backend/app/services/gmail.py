@@ -11,7 +11,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from ..core.config import settings
-from ..core.database import AsyncSessionLocal
+from ..core.database import SessionLocal as AsyncSessionLocal
 from ..core.models import Entry
 from ..services.claude import enrich_entry, extract_entities
 from ..services.embeddings import embed, chunk_text
