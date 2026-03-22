@@ -588,6 +588,28 @@ In the agentic chat loop, search results from the local DB get sent back to Clau
 - No custom entity types beyond the built-in Presidio recognizers
 - Dynatrace's built-in PII/guardrail tiles won't show this data — they only work with provider-native guardrail APIs (Bedrock, Azure OpenAI). Use the custom `security.pii.scrub.detections` counter in a custom DQL tile instead.
 
+### DQL Reference
+
+**Single-value total scrub count tile:**
+```dql
+timeseries detections = sum(security.pii.scrub.detections), from:now()-30d
+| fieldsAdd total = arraySum(detections)
+| summarize total = sum(total)
+```
+`from:now()-30d` is required — without it the tile goes empty when the dashboard time range has no data (same gotcha as cost tiles in Session 10).
+
+**Per-type breakdown (use a table or bar chart tile, not single-value):**
+```dql
+timeseries detections = sum(security.pii.scrub.detections), by:{entity_type, operation}, from:now()-30d
+| fieldsAdd total = arraySum(detections)
+| summarize total = sum(total), by:{entity_type, operation}
+```
+`timeseries` with `by:` grouping produces multiple series — Dynatrace won't allow it as a single-value tile.
+
+**DQL gotchas learned this session:**
+- `append` is not a valid DQL command (docs imply it but it doesn't parse). Handle the zero-data case via the tile's visualization "No data" setting instead.
+- `record(field = value)` and `record(field: value)` are not valid standalone DQL — neither `:` nor `=` is accepted inside `record()` in this context.
+
 ### Migration / Deployment Notes
 Rebuild required — new dependencies and Dockerfile change:
 ```bash
@@ -596,7 +618,8 @@ docker compose up -d --build backend
 First build will be slower due to spaCy model download (~560 MB). No DB changes, no new env vars.
 
 ### Commits
-(pending)
+- `e7094bb` feat: emit OTel counter and span event when PII is scrubbed
+- (doc) update CLAUDE.md and SESSIONS.md with DQL reference and gotchas
 
 ### Next Up
 - Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller

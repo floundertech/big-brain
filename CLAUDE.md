@@ -17,6 +17,14 @@ Key implementation details:
 - Presidio engines are lazy-loaded — no startup impact unless PII scrubbing is actually triggered.
 - `scrub_pii(text, operation)` emits a `security.pii.scrub.detections` OTel counter (one record per entity type, tagged with `entity_type` and `operation`) and a `pii.scrubbed` span event for trace-level visibility. Counter is a no-op when Dynatrace is not configured.
 - Dynatrace's built-in PII/guardrail tiles only work for providers with native guardrail APIs (Bedrock, Azure OpenAI). This custom counter is the only way to surface Presidio scrubbing events in Dynatrace.
+- **DQL for single-value total scrub count tile:**
+  ```dql
+  timeseries detections = sum(security.pii.scrub.detections), from:now()-30d
+  | fieldsAdd total = arraySum(detections)
+  | summarize total = sum(total)
+  ```
+  Do **not** add `by:{entity_type, operation}` — grouped `timeseries` produces multiple series and cannot be displayed as a single value. Use a table/bar chart tile for the per-type breakdown.
+- **DQL gotcha:** `append` is not a valid DQL command. To handle the zero-data case, set "No data" → `0` in the tile's visualization settings instead.
 
 Session 10 complete. Research/advisory session — no code changes. Investigated Dynatrace cost tile accuracy, Claude API pricing, and prompt caching.
 
