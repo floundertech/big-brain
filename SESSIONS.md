@@ -1,5 +1,42 @@
 # Session Summaries
 
+## Session 13: Gmail connector bugfix + end-to-end validation (2026-03-22)
+
+### Goal
+Get the Gmail connector (built in Session 12) working end-to-end on a live install.
+
+### What Got Built
+
+**`backend/app/services/gmail.py`** — 1 line fix:
+- Changed `from ..core.database import AsyncSessionLocal` → `from ..core.database import SessionLocal as AsyncSessionLocal`. The session factory has always been named `SessionLocal` in `database.py`; the wrong name caused an `ImportError` that crashed the backend on every startup when `gmail_token.json` was present.
+
+### Key Design Decisions
+
+No design changes. Pure bugfix session.
+
+### What's NOT Here
+
+- The `gmail_message_id` DB column migration still requires a manual `ALTER TABLE` on existing installs (documented in Session 12 and in README Troubleshooting). This is a known limitation of the no-Alembic approach.
+
+### Migration / Deployment Notes
+
+Two steps required for existing installs upgrading from Session 12:
+1. Pull and rebuild: `docker compose up --build -d backend`
+2. Run the column migration if not already done:
+   ```bash
+   docker compose exec db psql -U bigbrain -d bigbrain -c "ALTER TABLE entries ADD COLUMN IF NOT EXISTS gmail_message_id varchar(200) UNIQUE;"
+   ```
+
+### Commits
+
+- `332b46e` — Fix ImportError: AsyncSessionLocal → SessionLocal in gmail.py
+
+### Next Up
+
+Gmail connector is working. Next planned feature per BIGBRAIN.md roadmap.
+
+---
+
 ## Session 1: Entity Model Implementation (2026-03-20)
 
 ### Goal

@@ -1,9 +1,13 @@
 # Session Notes
 
 ## Active branch
-`claude/second-brain-platform-design-lkCxq` — Session 12 in progress (Gmail connector).
+`claude/second-brain-platform-design-lkCxq` — Session 13 complete (Gmail connector bugfix + confirmed working).
 
 ## Current state (2026-03-22)
+
+Session 13 complete. Fixed two bugs that prevented the Gmail connector from working on an existing install:
+1. `ImportError: cannot import name 'AsyncSessionLocal'` — `gmail.py` referenced `AsyncSessionLocal` but the session factory in `database.py` is named `SessionLocal`. Fixed with an import alias in `services/gmail.py`.
+2. `UndefinedColumnError: column entries.gmail_message_id does not exist` — the manual `ALTER TABLE` migration from Session 12 had not been run on the existing DB. Migration command was already documented; user ran it and connector came up fully. End-to-end confirmed: label applied in Gmail → poller picked it up → entry appeared in UI → label swapped to `big-brain/done`.
 
 Session 12 complete. Added Gmail connector (Layer 2d): label-based email ingestion with OAuth2 and a background asyncio poller.
 
