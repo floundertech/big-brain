@@ -56,7 +56,7 @@ def main():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(str(_CREDENTIALS), _SCOPES)
-            creds = flow.run_console()
+            creds = flow.run_local_server(port=0)
 
         _TOKEN.write_text(creds.to_json())
         print(f"Token saved to {_TOKEN}")
