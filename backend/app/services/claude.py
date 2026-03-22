@@ -172,7 +172,7 @@ Be concise and direct."""
 
 async def enrich_entry(text: str) -> dict:
     """Get title, summary, and tags for a piece of text."""
-    truncated = scrub_pii(text[:8000])  # stay well within token limits
+    truncated = scrub_pii(text[:8000], operation="enrich_entry")
     t0 = time.perf_counter()
     response = await asyncio.to_thread(
         client.messages.create,
@@ -186,7 +186,7 @@ async def enrich_entry(text: str) -> dict:
 
 async def extract_entities(text: str) -> dict:
     """Return {"people": [...], "organizations": [...]} extracted from text."""
-    truncated = scrub_pii(text[:8000])
+    truncated = scrub_pii(text[:8000], operation="extract_entities")
     t0 = time.perf_counter()
     response = await asyncio.to_thread(
         client.messages.create,

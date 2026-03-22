@@ -192,7 +192,7 @@ async def chat(req: ChatRequest, db: AsyncSession = Depends(get_db)):
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
-                    "content": scrub_pii(result_text),
+                    "content": scrub_pii(result_text, operation="chat_tool_result"),
                 })
 
             messages.append({"role": "user", "content": tool_results})

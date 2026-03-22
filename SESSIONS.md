@@ -556,10 +556,12 @@ Prevent structured PII (Social Security numbers, driver's license numbers, credi
 
 ### What Got Built
 
-**Backend: 4 files changed, 1 new file**
-- `backend/app/services/pii.py` *(new)*: `scrub_pii()` function using Microsoft Presidio. Lazy-initializes `AnalyzerEngine` + `AnonymizerEngine` on first call. Detects 7 entity types: `US_SSN`, `US_DRIVER_LICENSE`, `CREDIT_CARD`, `US_PASSPORT`, `US_BANK_NUMBER`, `US_ITIN`, `IBAN_CODE`. Score threshold 0.7 to reduce false positives.
-- `backend/app/services/claude.py`: imports `scrub_pii`, applies it to text before sending to Claude in `enrich_entry()` and `extract_entities()`.
-- `backend/app/api/chat.py`: imports `scrub_pii`, applies it to all tool result text before it re-enters the Claude message loop as context.
+**Backend: 6 files changed, 1 new file**
+- `backend/app/services/pii.py` *(new)*: `scrub_pii(text, operation)` using Microsoft Presidio. Lazy-initializes `AnalyzerEngine` + `AnonymizerEngine` on first call. Detects 7 entity types. Score threshold 0.7. On detection: emits `security.pii.scrub.detections` OTel counter (per entity type + operation) and a `pii.scrubbed` span event for trace-level visibility.
+- `backend/app/services/claude.py`: applies `scrub_pii` in `enrich_entry()` and `extract_entities()` with matching operation names.
+- `backend/app/api/chat.py`: applies `scrub_pii` to all tool results before they re-enter the Claude message loop, tagged `operation="chat_tool_result"`.
+- `backend/app/core/telemetry.py`: added `get/set_pii_scrub_counter()` following the existing histogram pattern.
+- `backend/app/main.py`: creates `security.pii.scrub.detections` Counter in `_init_tracing()` via the owned `MeterProvider`.
 - `backend/requirements.txt`: added `presidio-analyzer>=2.2.0`, `presidio-anonymizer>=2.2.0`, `spacy>=3.7.0`.
 - `backend/Dockerfile`: added `python -m spacy download en_core_web_lg` at build time.
 
@@ -584,7 +586,7 @@ In the agentic chat loop, search results from the local DB get sent back to Clau
 - No scrubbing of user-typed chat messages (only tool results and ingest prompts)
 - No configuration to toggle PII scrubbing on/off (always active)
 - No custom entity types beyond the built-in Presidio recognizers
-- No logging of what was scrubbed (only count of detections)
+- Dynatrace's built-in PII/guardrail tiles won't show this data — they only work with provider-native guardrail APIs (Bedrock, Azure OpenAI). Use the custom `security.pii.scrub.detections` counter in a custom DQL tile instead.
 
 ### Migration / Deployment Notes
 Rebuild required — new dependencies and Dockerfile change:

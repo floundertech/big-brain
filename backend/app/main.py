@@ -73,7 +73,7 @@ def _init_tracing():
         unit="{token}",
         description="Number of tokens used in gen_ai API calls",
     )
-    from .core.telemetry import set_token_usage_histogram, set_operation_duration_histogram
+    from .core.telemetry import set_token_usage_histogram, set_operation_duration_histogram, set_pii_scrub_counter
     set_token_usage_histogram(hist)
     dur_hist = provider.get_meter("big-brain.claude").create_histogram(
         "gen_ai.client.operation.duration",
@@ -81,7 +81,13 @@ def _init_tracing():
         description="Duration of gen_ai API calls in seconds",
     )
     set_operation_duration_histogram(dur_hist)
-    logger.warning("MeterProvider initialized, histograms registered")
+    pii_counter = provider.get_meter("big-brain.security").create_counter(
+        "security.pii.scrub.detections",
+        unit="{detection}",
+        description="Number of PII entities scrubbed before outbound API calls, by entity type and operation",
+    )
+    set_pii_scrub_counter(pii_counter)
+    logger.warning("MeterProvider initialized, histograms and counters registered")
     return provider
 
 

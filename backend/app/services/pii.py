@@ -9,7 +9,9 @@ when PII scrubbing hasn't been triggered yet.
 """
 
 import logging
+from collections import Counter
 
+from opentelemetry import trace as _otel_trace
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 
@@ -40,11 +42,15 @@ def _get_engines() -> tuple[AnalyzerEngine, AnonymizerEngine]:
     return _analyzer, _anonymizer
 
 
-def scrub_pii(text: str) -> str:
+def scrub_pii(text: str, operation: str = "unknown") -> str:
     """Remove structured PII from text before sending to external APIs.
 
     Returns the text with detected PII replaced by type placeholders
     (e.g. ``<US_SSN>``, ``<CREDIT_CARD>``). Names are NOT scrubbed.
+
+    Emits a ``security.pii.scrub.detections`` counter increment per entity
+    type detected, tagged with ``operation``. Also adds a span event to the
+    active OTel span for trace-level visibility in Dynatrace.
     """
     if not text:
         return text
@@ -57,6 +63,34 @@ def scrub_pii(text: str) -> str:
     )
     if not results:
         return text
+
     scrubbed = anonymizer.anonymize(text=text, analyzer_results=results)
-    logger.info("Scrubbed %d PII entities from outbound text", len(results))
+
+    # Aggregate by entity type so we emit one counter record per type.
+    counts_by_type = Counter(r.entity_type for r in results)
+    logger.info(
+        "Scrubbed PII in operation=%s: %s",
+        operation,
+        dict(counts_by_type),
+    )
+
+    # Emit counter — one .add() per entity type so Dynatrace can split by type in DQL.
+    from ..core.telemetry import get_pii_scrub_counter
+    counter = get_pii_scrub_counter()
+    if counter is not None:
+        for entity_type, count in counts_by_type.items():
+            counter.add(count, {"entity_type": entity_type, "operation": operation})
+
+    # Span event for trace-level detail (visible in Dynatrace distributed tracing).
+    span = _otel_trace.get_current_span()
+    if span.is_recording():
+        span.add_event(
+            "pii.scrubbed",
+            {
+                "operation": operation,
+                "entity_types": ",".join(counts_by_type.keys()),
+                "total_detections": len(results),
+            },
+        )
+
     return scrubbed.text
