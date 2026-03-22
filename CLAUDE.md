@@ -1,7 +1,7 @@
 # Session Notes
 
 ## Active branch
-`claude/second-brain-platform-design-lkCxq` (Session 11: PII scrubbing with Presidio, 2026-03-22)
+`main` — Session 11 merged 2026-03-22. Next session should branch from `main`.
 
 ## Current state (2026-03-22)
 
