@@ -26,6 +26,9 @@ services:
       EMBED_MODEL: ${EMBED_MODEL:-nomic-ai/nomic-embed-text-v1.5}
       DT_OTLP_ENDPOINT: ${DT_OTLP_ENDPOINT:-}
       DT_API_TOKEN: ${DT_API_TOKEN:-}
+      GMAIL_POLL_INTERVAL_SECONDS: ${GMAIL_POLL_INTERVAL_SECONDS:-300}
+      GMAIL_INGEST_LABEL: ${GMAIL_INGEST_LABEL:-big-brain}
+      GMAIL_DONE_LABEL: ${GMAIL_DONE_LABEL:-big-brain/done}
     ports:
       - "8000:8000"
     depends_on:
@@ -33,6 +36,7 @@ services:
         condition: service_healthy
     volumes:
       - embed_cache:/root/.cache/huggingface
+      - ./gmail_token.json:/app/gmail_token.json:ro
 
   frontend:
     build: ./frontend

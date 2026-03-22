@@ -1,8 +1,11 @@
 """
 One-time Gmail OAuth2 authorization script.
 
-Usage:
-    python backend/scripts/gmail_auth.py
+Usage (from project root):
+    docker compose run --rm \\
+      -v $(pwd)/credentials.json:/app/credentials.json \\
+      -v $(pwd):/tokens \\
+      backend python scripts/gmail_auth.py
 
 Prerequisites:
     1. Create a Google Cloud project at https://console.cloud.google.com
@@ -10,19 +13,21 @@ Prerequisites:
     3. Create OAuth 2.0 credentials (APIs & Services → Credentials → Create → OAuth client ID)
        - Application type: Desktop app
        - Download the JSON and save it as credentials.json in the project root
-    4. Run this script — a browser window will open for authorization
-    5. After authorizing, gmail_token.json is written to the project root
+    4. Run this script — it will print a URL to open in your browser
+    5. Authorize in the browser, copy the code, paste it back into the terminal
+    6. gmail_token.json is written to the project root
 
 Both credentials.json and gmail_token.json are gitignored.
 """
+import os
 import sys
 from pathlib import Path
 
-# Run from project root or backend/scripts — find the project root either way
-_HERE = Path(__file__).resolve().parent
-_PROJECT_ROOT = _HERE.parent.parent
-_CREDENTIALS = _PROJECT_ROOT / "credentials.json"
-_TOKEN = _PROJECT_ROOT / "gmail_token.json"
+# credentials.json is mounted at /app/credentials.json in the container.
+# gmail_token.json is written to /tokens (project root bind-mounted) so it
+# persists on the host after the container exits.
+_CREDENTIALS = Path(os.environ.get("GMAIL_CREDENTIALS", "/app/credentials.json"))
+_TOKEN = Path(os.environ.get("GMAIL_TOKEN", "/tokens/gmail_token.json"))
 
 _SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
@@ -51,7 +56,7 @@ def main():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(str(_CREDENTIALS), _SCOPES)
-            creds = flow.run_local_server(port=0)
+            creds = flow.run_console()
 
         _TOKEN.write_text(creds.to_json())
         print(f"Token saved to {_TOKEN}")

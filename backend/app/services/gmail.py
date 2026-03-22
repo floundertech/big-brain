@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import logging
+import os
 import re
 from email import message_from_bytes
 from email.header import decode_header
@@ -18,8 +19,8 @@ from ..services.entities import link_entities_to_entry
 
 logger = logging.getLogger("big-brain.gmail")
 
-_CREDENTIALS_PATH = Path("credentials.json")
-_TOKEN_PATH = Path("gmail_token.json")
+import os
+_TOKEN_PATH = Path(os.environ.get("GMAIL_TOKEN", "/app/gmail_token.json"))
 
 _SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
