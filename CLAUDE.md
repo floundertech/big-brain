@@ -1,9 +1,26 @@
 # Session Notes
 
 ## Active branch
-`claude/second-brain-platform-design-lkCxq` (Session 9: Dynatrace field reference + DQL research, 2026-03-21)
+`claude/second-brain-platform-design-lkCxq` (Session 10: Dynatrace cost DQL + token pricing research, 2026-03-22)
 
-## Current state (2026-03-21)
+## Current state (2026-03-22)
+
+Session 10 complete. Research/advisory session — no code changes. Investigated Dynatrace cost tile accuracy, Claude API pricing, and prompt caching.
+
+Key findings:
+- **Dynatrace built-in cost tile is inaccurate.** It sums all token types without splitting by `gen_ai.token.type`, then applies a simple average of input and output rates — overestimates when input tokens >> output tokens (the norm). Correct DQL splits by type and applies the right rate to each.
+- **Correct cost DQL pattern:**
+  ```dql
+  timeseries tokens = sum(gen_ai.client.token.usage), by:{gen_ai.token.type}
+  | fieldsAdd token_sum = arraySum(tokens)
+  | fieldsAdd rate = if(gen_ai.token.type == "input", <input_rate>, else:<output_rate>)
+  | fieldsAdd cost = token_sum * rate
+  | summarize total_cost = sum(cost)
+  ```
+- **`timeseries` returns empty if the dashboard time range has no data.** Pin an explicit range (`from:now()-30d`) in cost tiles.
+- **Prompt caching not used and not worth adding.** `_AGENTIC_SYSTEM` + tool definitions are ~400–500 tokens — below the 1024-token minimum cacheable size for Sonnet. Volume is too low to matter anyway.
+- **All three Claude call sites use `claude-sonnet-4-6`.** `enrich_entry` and `extract_entities` are simple JSON extraction tasks — could swap to Haiku (~10× cheaper) if cost becomes a concern. `chat_turn` should stay on Sonnet.
+- **Prompt caching token types:** If caching is ever added, `_record_usage()` would need three separate histogram records (`input`, `cache_read`, `cache_write`) to support accurate cost math. Currently all are summed to `input` per OTel convention — correct since caching is off.
 
 Session 9 complete. Research/reference session — no code changes. Reviewed the official Dynatrace Global Field Reference to validate the gen_ai span attribute names and DQL query fixes from Session 8. Key confirmations:
 - `span.status_code` legal values are `"ok"` and `"error"` only (null = unset). Session 8's failure-rate DQL fix is spec-correct.

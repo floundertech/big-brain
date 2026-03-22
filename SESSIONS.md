@@ -499,6 +499,56 @@ None.
 
 ---
 
+## Session 10: Dynatrace Cost DQL + Token Pricing Research (2026-03-22)
+
+### Goal
+Understand why the Dynatrace built-in cost tile showed $0.21 while a corrected DQL query showed $0.11, and review Claude API pricing and prompt caching as they relate to Big Brain.
+
+### What Got Built
+Nothing — advisory/research session only. No files changed (except docs).
+
+### Key Findings
+
+**Dynatrace built-in cost tile is wrong**
+The built-in query sums all tokens together (no `by:{gen_ai.token.type}` split) and applies a simple arithmetic average of input and output rates: `(input_rate + output_rate) / 2`. This overestimates cost whenever input tokens outnumber output tokens — which they almost always do in LLM apps. In this case: $0.21 (DT tile) vs $0.11 (correct split-by-type query).
+
+**Correct cost DQL pattern**
+```dql
+timeseries tokens = sum(gen_ai.client.token.usage), by:{gen_ai.token.type}
+| fieldsAdd token_sum = arraySum(tokens)
+| fieldsAdd rate = if(gen_ai.token.type == "input", <input_rate>, else:<output_rate>)
+| fieldsAdd cost = token_sum * rate
+| summarize total_cost = sum(cost)
+```
+Pin a time range in the query itself (`from:now()-30d`) so cost tiles aren't sensitive to dashboard time picker state.
+
+**`timeseries` returning empty — fixed time range was the culprit**
+The tile had a fixed time window with no data. Root cause: no data in that period, not a query bug.
+
+**Prompt caching — not used, not worth adding**
+Big Brain does not use Anthropic prompt caching. The `_AGENTIC_SYSTEM` + tool definitions total ~400–500 tokens, below the 1024-token minimum for Sonnet. Volume is too low (personal tool) for meaningful savings even if it worked.
+
+**All three call sites use `claude-sonnet-4-6`**
+`enrich_entry` and `extract_entities` are simple structured JSON extraction tasks — good candidates for Haiku (~10× cheaper per token) if cost optimization is ever needed. `chat_turn` is user-facing and should stay on Sonnet.
+
+**Prompt caching and `_record_usage()` compatibility**
+If caching is ever enabled, `_record_usage()` currently sums `cache_read_input_tokens` and `cache_creation_input_tokens` into the single `input` histogram bucket (correct per OTel gen_ai convention). Accurate cost math would require three separate histogram records with token types `input`, `cache_read`, `cache_write` and different rates applied per type.
+
+### What's NOT in This Version
+Everything — no code shipped.
+
+### Migration / Deployment Notes
+None.
+
+### Commits
+None (docs only).
+
+### Next Up
+- Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller
+- Dynatrace cost notebook: use correct split-by-type DQL, pin 30-day window
+
+---
+
 ## Template for Future Sessions
 
 ### Goal
