@@ -549,6 +549,59 @@ None (docs only).
 
 ---
 
+## Session 11: PII Scrubbing with Presidio (2026-03-22)
+
+### Goal
+Prevent structured PII (Social Security numbers, driver's license numbers, credit cards, passports, etc.) from being sent to external APIs (Claude, Tavily) while keeping names and general text intact.
+
+### What Got Built
+
+**Backend: 4 files changed, 1 new file**
+- `backend/app/services/pii.py` *(new)*: `scrub_pii()` function using Microsoft Presidio. Lazy-initializes `AnalyzerEngine` + `AnonymizerEngine` on first call. Detects 7 entity types: `US_SSN`, `US_DRIVER_LICENSE`, `CREDIT_CARD`, `US_PASSPORT`, `US_BANK_NUMBER`, `US_ITIN`, `IBAN_CODE`. Score threshold 0.7 to reduce false positives.
+- `backend/app/services/claude.py`: imports `scrub_pii`, applies it to text before sending to Claude in `enrich_entry()` and `extract_entities()`.
+- `backend/app/api/chat.py`: imports `scrub_pii`, applies it to all tool result text before it re-enters the Claude message loop as context.
+- `backend/requirements.txt`: added `presidio-analyzer>=2.2.0`, `presidio-anonymizer>=2.2.0`, `spacy>=3.7.0`.
+- `backend/Dockerfile`: added `python -m spacy download en_core_web_lg` at build time.
+
+### Key Design Decisions
+
+**Presidio over regex**
+Regex-based SSN/CC scrubbing is fragile — driver's license formats vary by state, patterns overlap with normal numbers, and maintenance never ends. Presidio uses NLP + pattern recognizers and handles edge cases out of the box. The trade-off is image size (+~560 MB for the spaCy model).
+
+**Explicit entity allow-list, not scrub-everything**
+Presidio can detect 20+ entity types including names, emails, and phone numbers. The user explicitly wants names to pass through (they're entities in the knowledge graph). Only structured ID numbers that could cause real harm are scrubbed.
+
+**API-only scrubbing, not storage**
+Raw text in the local Postgres database is never modified. PII scrubbing only applies to text before it leaves the system via Claude API or Tavily. Your data, your hardware, your control.
+
+**Lazy initialization**
+Presidio engines (and the spaCy model) are loaded on first `scrub_pii()` call, not at startup. This avoids adding to the already 2–5 minute startup time when PII scrubbing hasn't been triggered yet.
+
+**Scrub tool results, not just ingest**
+In the agentic chat loop, search results from the local DB get sent back to Claude as tool result context. If a note contains an SSN, that text would be sent to the API. Scrubbing happens at the tool result level — one scrub point covers all tool types.
+
+### What's NOT in This Version
+- No scrubbing of user-typed chat messages (only tool results and ingest prompts)
+- No configuration to toggle PII scrubbing on/off (always active)
+- No custom entity types beyond the built-in Presidio recognizers
+- No logging of what was scrubbed (only count of detections)
+
+### Migration / Deployment Notes
+Rebuild required — new dependencies and Dockerfile change:
+```bash
+docker compose up -d --build backend
+```
+First build will be slower due to spaCy model download (~560 MB). No DB changes, no new env vars.
+
+### Commits
+(pending)
+
+### Next Up
+- Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller
+- Optional: scrub user chat messages too (currently only tool results and ingest are scrubbed)
+
+---
+
 ## Template for Future Sessions
 
 ### Goal

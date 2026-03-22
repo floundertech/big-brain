@@ -9,6 +9,7 @@ from ..core.models import Entry
 from ..services.embeddings import embed
 from ..services.claude import chat_turn, enrich_entry, extract_entities
 from ..services.entities import link_entities_to_entry
+from ..services.pii import scrub_pii
 from ..services.tavily import web_search as tavily_search
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -191,7 +192,7 @@ async def chat(req: ChatRequest, db: AsyncSession = Depends(get_db)):
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
-                    "content": result_text,
+                    "content": scrub_pii(result_text),
                 })
 
             messages.append({"role": "user", "content": tool_results})

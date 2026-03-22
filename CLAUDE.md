@@ -1,9 +1,20 @@
 # Session Notes
 
 ## Active branch
-`claude/second-brain-platform-design-lkCxq` (Session 10: Dynatrace cost DQL + token pricing research, 2026-03-22)
+`claude/second-brain-platform-design-lkCxq` (Session 11: PII scrubbing with Presidio, 2026-03-22)
 
 ## Current state (2026-03-22)
+
+Session 11 complete. Added PII scrubbing via Microsoft Presidio to prevent structured identifiers (SSN, driver's license, credit card, passport, ITIN, IBAN, bank account) from being sent to external APIs. Names pass through untouched.
+
+Key implementation details:
+- `services/pii.py`: `scrub_pii()` function using Presidio `AnalyzerEngine` + `AnonymizerEngine`. Lazy-initialized on first call.
+- Only scrubs outbound API calls — raw text stored locally in Postgres is unchanged.
+- Scrub points: `enrich_entry()` and `extract_entities()` in `claude.py`, and all tool result text in `chat.py` before it re-enters the Claude message loop.
+- Entity list is explicit: `US_SSN`, `US_DRIVER_LICENSE`, `CREDIT_CARD`, `US_PASSPORT`, `US_BANK_NUMBER`, `US_ITIN`, `IBAN_CODE`. No names, emails, or phone numbers.
+- Score threshold 0.7 to reduce false positives.
+- spaCy `en_core_web_lg` model downloaded at Docker build time (adds ~560 MB to image).
+- Presidio engines are lazy-loaded — no startup impact unless PII scrubbing is actually triggered.
 
 Session 10 complete. Research/advisory session — no code changes. Investigated Dynatrace cost tile accuracy, Claude API pricing, and prompt caching.
 

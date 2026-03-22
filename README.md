@@ -121,6 +121,9 @@ People and organizations are extracted automatically from every entry and stored
 - Entity page shows every entry that mentions them
 - API filterable: `GET /entities/?entity_type=person`, `GET /entities/?entry_id=123`
 
+### PII Scrubbing
+Structured PII (Social Security numbers, driver's license numbers, credit cards, passports, bank account numbers, ITINs, IBANs) is automatically scrubbed before any text is sent to external APIs (Claude, Tavily). Names and general text pass through untouched — they're needed for entity extraction. Your raw data stored locally in Postgres is never modified.
+
 ---
 
 ## Ingest from Plaud

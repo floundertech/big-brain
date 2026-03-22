@@ -7,6 +7,7 @@ import anthropic
 from opentelemetry import trace as _otel_trace
 from ..core.config import settings
 from ..core.telemetry import get_token_usage_histogram, get_operation_duration_histogram
+from .pii import scrub_pii
 
 logger = logging.getLogger("big-brain.claude")
 
@@ -171,7 +172,7 @@ Be concise and direct."""
 
 async def enrich_entry(text: str) -> dict:
     """Get title, summary, and tags for a piece of text."""
-    truncated = text[:8000]  # stay well within token limits
+    truncated = scrub_pii(text[:8000])  # stay well within token limits
     t0 = time.perf_counter()
     response = await asyncio.to_thread(
         client.messages.create,
@@ -185,7 +186,7 @@ async def enrich_entry(text: str) -> dict:
 
 async def extract_entities(text: str) -> dict:
     """Return {"people": [...], "organizations": [...]} extracted from text."""
-    truncated = text[:8000]
+    truncated = scrub_pii(text[:8000])
     t0 = time.perf_counter()
     response = await asyncio.to_thread(
         client.messages.create,
