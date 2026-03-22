@@ -622,8 +622,73 @@ First build will be slower due to spaCy model download (~560 MB). No DB changes,
 - (doc) update CLAUDE.md and SESSIONS.md with DQL reference and gotchas
 
 ### Next Up
-- Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller
+- Gmail connector (Layer 2d): label-based email ingestion, OAuth2 flow, background poller ← done in Session 12
 - Optional: scrub user chat messages too (currently only tool results and ingest are scrubbed)
+
+---
+
+## Session 12: Gmail Connector (2026-03-22)
+
+### Goal
+Layer 2d from the roadmap: zero-friction email capture by applying a Gmail label. Label a message `big-brain` → it gets ingested, enriched, and appears in the knowledge base automatically.
+
+### What Got Built
+
+**Backend: 5 files changed, 2 new files**
+- `backend/app/services/gmail.py` *(new)*: `run_poller()` background task. `poll_once()` fetches messages with the `big-brain` label via Gmail API, parses MIME bodies (plain text preferred, HTML stripped as fallback), builds a text block including From/Date/Subject headers, runs the normal enrichment pipeline (enrich → embed → chunk → extract entities), and swaps labels to `big-brain/done` on success.
+- `backend/scripts/gmail_auth.py` *(new)*: one-time CLI OAuth2 flow. Reads `credentials.json`, opens a browser, writes `gmail_token.json`. Also silently refreshes an existing expired token.
+- `backend/app/core/models.py`: added `gmail_message_id` nullable unique column to `Entry`.
+- `backend/app/core/config.py`: added `GMAIL_POLL_INTERVAL_SECONDS` (default 300), `GMAIL_INGEST_LABEL` (default `big-brain`), `GMAIL_DONE_LABEL` (default `big-brain/done`).
+- `backend/app/main.py`: `asyncio.create_task(run_poller())` in lifespan; task cancelled on shutdown. Added `import asyncio`.
+- `backend/requirements.txt`: added `google-api-python-client>=2.100.0`, `google-auth-httplib2>=0.2.0`, `google-auth-oauthlib>=1.1.0`.
+- `.gitignore`: added `credentials.json` and `gmail_token.json`.
+
+### Key Design Decisions
+
+**Label swap as idempotency mechanism**
+Processed messages have the `big-brain` label removed, so the poller never sees them again. `gmail_message_id` unique constraint is a secondary dedup guard for the edge case where a message is seen before label removal completes.
+
+**Auto-create labels**
+If the user applies the label manually in Gmail, it exists. But `big-brain/done` is created by the app on first use. `_get_or_create_label()` handles both cases — no manual Gmail setup required beyond applying the label to messages.
+
+**MIME parsing: plain first, HTML fallback**
+Prefer `text/plain` parts. If only HTML is present, strip tags with a regex and normalize whitespace. Attachment handling: note appended to raw text, no binary data ingested.
+
+**Header block in raw_text**
+From, Date, Subject are prepended to the body before ingestion. This means Claude enrichment (title, tags, entities) has sender and subject context, and the full email is searchable in RAG.
+
+**gmail_auth.py outside Docker**
+The auth flow needs a browser. Running it inside the container would require port-forwarding complexity. The script is designed to run on the host and outputs `gmail_token.json` which gets mounted into the container (or committed to a bind-mount path).
+
+### What's NOT in This Version
+- No push/webhook support — polling only (sufficient for personal use)
+- Attachments are noted but not ingested (no PDF/image pipeline yet — that's Layer 3)
+- No UI for Gmail connection status or last-poll timestamp
+- Auth script requires manual GCP project setup (unavoidable — Google controls this)
+
+### Migration / Deployment Notes
+**DB migration required for existing installs:**
+```bash
+docker compose exec db psql -U postgres bigbrain -c "ALTER TABLE entries ADD COLUMN IF NOT EXISTS gmail_message_id varchar(200) UNIQUE;"
+```
+**New dependencies — rebuild backend:**
+```bash
+docker compose up -d --build backend
+```
+**One-time auth (on host, not in Docker):**
+```bash
+pip install google-api-python-client google-auth-oauthlib
+python backend/scripts/gmail_auth.py
+```
+Place `credentials.json` (from GCP Console) and resulting `gmail_token.json` in the project root before running.
+
+### Commits
+[Hash — message]
+
+### Next Up
+- Layer 2b: Typed tag system (`domain:`, `company:`, `topic:` prefixes with AI suggestions)
+- Layer 2c: Research/Enrichment (entity enrich button + free-form research page)
+- Layer 3: File ingestion (PDF, images — would unlock email attachment handling too)
 
 ---
 

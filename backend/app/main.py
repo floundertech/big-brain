@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -96,7 +97,10 @@ async def lifespan(app: FastAPI):
     meter_provider = _init_tracing()
     await init_db()
     get_model()  # pre-load embedding model at startup to avoid OOM spike mid-request
+    from .services.gmail import run_poller
+    gmail_task = asyncio.create_task(run_poller())
     yield
+    gmail_task.cancel()
     if meter_provider is not None:
         meter_provider.force_flush()
         meter_provider.shutdown()

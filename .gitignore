@@ -6,3 +6,5 @@ __pycache__/
 .env
 *.egg-info/
 .venv/
+credentials.json
+gmail_token.json

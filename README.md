@@ -114,6 +114,19 @@ Semantic vector search — finds conceptually relevant entries, not just keyword
 ### Chat
 Agentic chat: Claude searches your notes, looks up entities, and optionally searches the web or saves new entries. For local knowledge questions it searches silently and answers directly. For web research it asks before searching (to keep costs visible), and asks before saving anything.
 
+### Gmail connector (optional)
+Label any Gmail message `big-brain` → it gets ingested automatically. The poller runs every 5 minutes (configurable). After ingestion the label is swapped to `big-brain/done`.
+
+**One-time setup:**
+1. Create a Google Cloud project, enable the Gmail API, and create an OAuth 2.0 Desktop App credential at [console.cloud.google.com](https://console.cloud.google.com)
+2. Download the credential JSON and save it as `credentials.json` in the project root (gitignored)
+3. Run the auth script once (outside Docker — needs a browser):
+   ```bash
+   pip install google-api-python-client google-auth-oauthlib
+   python backend/scripts/gmail_auth.py
+   ```
+4. `gmail_token.json` is written to the project root (gitignored). Restart the app — the poller starts automatically.
+
 ### Entities
 People and organizations are extracted automatically from every entry and stored as first-class entities.
 
@@ -145,6 +158,9 @@ Structured PII (Social Security numbers, driver's license numbers, credit cards,
 | `TAVILY_API_KEY` | No | — | Enables web search in chat. Free plan at tavily.com (1,000 searches/month). |
 | `DT_OTLP_ENDPOINT` | No | — | Dynatrace OTLP endpoint for LLM tracing. Format: `https://{env-id}.live.dynatrace.com/api/v2/otlp` |
 | `DT_API_TOKEN` | No | — | Dynatrace API token. Needs scopes: `openTelemetryTrace.ingest`, `metrics.ingest`, `logs.ingest`. Both this and `DT_OTLP_ENDPOINT` must be set to enable tracing. When enabled, each Anthropic call emits span attributes (`gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.request.model`) **and** the `gen_ai.client.token.usage` OTLP histogram metric, queryable via `timeseries t=sum(gen_ai.client.token.usage)`. |
+| `GMAIL_POLL_INTERVAL_SECONDS` | No | `300` | How often the Gmail poller checks for new labeled messages. |
+| `GMAIL_INGEST_LABEL` | No | `big-brain` | Gmail label to watch for messages to ingest. |
+| `GMAIL_DONE_LABEL` | No | `big-brain/done` | Label applied after successful ingestion (replaces ingest label). |
 
 ---
 
@@ -284,6 +300,15 @@ success=countIf(isNull(span.status_code) or span.status_code == "ok")
 The chunk-based search index needs to be backfilled. Run once:
 ```bash
 curl -X POST http://localhost:8000/entries/reindex
+```
+
+**Gmail connector not ingesting messages**
+Check that `gmail_token.json` exists in the project root and is mounted into the container. Backend logs will show `Gmail token not found — poller disabled` on startup if it's missing. If the token is expired, re-run `python backend/scripts/gmail_auth.py`. Make sure the message has the exact label `big-brain` (case-insensitive).
+
+**Updating from a version before Gmail connector (`gmail_message_id` column missing)**
+Run once against the existing DB:
+```bash
+docker compose exec db psql -U postgres bigbrain -c "ALTER TABLE entries ADD COLUMN IF NOT EXISTS gmail_message_id varchar(200) UNIQUE;"
 ```
 
 **Wipe everything and start fresh**

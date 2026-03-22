@@ -25,6 +25,7 @@ class Entry(Base):
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     embedding: Mapped[list[float]] = mapped_column(Vector(settings.embed_dim), nullable=True)
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # e.g. {"sources": ["url1", ...]}
+    gmail_message_id: Mapped[str | None] = mapped_column(String(200), nullable=True, unique=True)
 
 
 class Entity(Base):

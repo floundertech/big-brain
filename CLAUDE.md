@@ -1,9 +1,26 @@
 # Session Notes
 
 ## Active branch
-`main` — Session 11 merged 2026-03-22. Next session should branch from `main`.
+`claude/second-brain-platform-design-lkCxq` — Session 12 in progress (Gmail connector).
 
 ## Current state (2026-03-22)
+
+Session 12 complete. Added Gmail connector (Layer 2d): label-based email ingestion with OAuth2 and a background asyncio poller.
+
+Key implementation details:
+- `services/gmail.py`: `run_poller()` long-running background task, `poll_once()` single cycle. Started in lifespan via `asyncio.create_task()`.
+- Label convention: apply `big-brain` → ingested → label swapped to `big-brain/done`. Labels auto-created if missing.
+- MIME parsing: `text/plain` preferred, HTML stripped as fallback. From/Date/Subject prepended to body for richer enrichment context.
+- Normal ingest pipeline reused: `enrich_entry()` → `embed()` → `chunk_text()` → `extract_entities()` → `link_entities_to_entry()`.
+- `Entry.gmail_message_id` nullable unique column added for dedup.
+- `scripts/gmail_auth.py`: one-time CLI OAuth2 flow. Run on host (needs browser). Writes `gmail_token.json`. Silently refreshes expired tokens on subsequent runs.
+- `credentials.json` and `gmail_token.json` added to `.gitignore`.
+- New env vars: `GMAIL_POLL_INTERVAL_SECONDS` (default 300), `GMAIL_INGEST_LABEL` (default `big-brain`), `GMAIL_DONE_LABEL` (default `big-brain/done`).
+- Poller silently skips if `gmail_token.json` is absent — Gmail is opt-in, nothing breaks without it.
+- New dependencies: `google-api-python-client`, `google-auth-httplib2`, `google-auth-oauthlib`.
+- **DB migration for existing installs:** `ALTER TABLE entries ADD COLUMN IF NOT EXISTS gmail_message_id varchar(200) UNIQUE;`
+
+---
 
 Session 11 complete. Added PII scrubbing via Microsoft Presidio to prevent structured identifiers (SSN, driver's license, credit card, passport, ITIN, IBAN, bank account) from being sent to external APIs. Names pass through untouched.
 
