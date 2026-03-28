@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.database import init_db
 from .core.config import settings
 from .services.embeddings import get_model
-from .api import entries, search, chat, entities
+from .api import entries, search, chat, entities, rss, home
 
 logger = logging.getLogger("big-brain.telemetry")
 
@@ -99,8 +99,13 @@ async def lifespan(app: FastAPI):
     get_model()  # pre-load embedding model at startup to avoid OOM spike mid-request
     from .services.gmail import run_poller
     gmail_task = asyncio.create_task(run_poller())
+    from .services.rss import run_poller as rss_run_poller, run_digest_scheduler
+    rss_task = asyncio.create_task(rss_run_poller())
+    digest_task = asyncio.create_task(run_digest_scheduler())
     yield
     gmail_task.cancel()
+    rss_task.cancel()
+    digest_task.cancel()
     if meter_provider is not None:
         meter_provider.force_flush()
         meter_provider.shutdown()
@@ -119,6 +124,8 @@ app.include_router(entries.router)
 app.include_router(search.router)
 app.include_router(chat.router)
 app.include_router(entities.router)
+app.include_router(rss.router)
+app.include_router(home.router)
 
 
 @app.get("/health")

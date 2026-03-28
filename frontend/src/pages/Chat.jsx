@@ -1,17 +1,38 @@
 import { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import Markdown from "../components/Markdown";
 
 export default function Chat() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [sources, setSources] = useState([]);
   const bottomRef = useRef();
+  const initialQueryHandled = useRef(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  // Handle ?q= query param from Quick Ask redirect
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q && !initialQueryHandled.current) {
+      initialQueryHandled.current = true;
+      setSearchParams({}, { replace: true });
+      const userMsg = { role: "user", content: q };
+      setMessages([userMsg]);
+      setLoading(true);
+      api.chat([userMsg]).then((res) => {
+        setMessages([userMsg, { role: "assistant", content: res.answer }]);
+        setSources(res.sources);
+      }).catch((err) => {
+        setMessages([userMsg, { role: "assistant", content: `Error: ${err.message}` }]);
+      }).finally(() => setLoading(false));
+    }
+  }, [searchParams, setSearchParams]);
 
   async function send(e) {
     e.preventDefault();

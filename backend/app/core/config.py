@@ -12,6 +12,14 @@ class Settings(BaseSettings):
     gmail_poll_interval_seconds: int = 300
     gmail_ingest_label: str = "big-brain"
     gmail_done_label: str = "big-brain/done"
+    # RSS / Miniflux
+    miniflux_url: str | None = None
+    miniflux_api_key: str | None = None
+    rss_poll_interval_seconds: int = 3600
+    rss_digest_hour: int = 5
+    rss_digest_model: str = "claude-haiku-4-5-20251001"
+    rss_relevance_topics: str = ""
+    rss_initial_backfill_days: int = 30
 
     class Config:
         env_file = ".env"

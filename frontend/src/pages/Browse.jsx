@@ -27,6 +27,10 @@ export default function Browse() {
           <option value="">All types</option>
           <option value="transcript">Transcripts</option>
           <option value="note">Notes</option>
+          <option value="email">Email</option>
+          <option value="research">Research</option>
+          <option value="rss">RSS Articles</option>
+          <option value="rss_digest">RSS Digests</option>
         </select>
       </div>
 

@@ -27,6 +27,18 @@ class Entry(Base):
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # e.g. {"sources": ["url1", ...]}
     gmail_message_id: Mapped[str | None] = mapped_column(String(200), nullable=True, unique=True)
 
+    # Partial expression index for fast RSS dedup on meta->>'miniflux_entry_id'.
+    # Created via raw DDL in init_db() since SQLAlchemy mapped columns don't support
+    # JSON path subscript at class-definition time.
+
+
+class Setting(Base):
+    """Simple key-value store for runtime state that must survive restarts."""
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON, nullable=False)
+
 
 class Entity(Base):
     __tablename__ = "entities"

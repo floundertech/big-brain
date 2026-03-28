@@ -39,6 +39,17 @@ export const api = {
   },
   search: (q, limit = 10) => req("GET", `/search/?q=${encodeURIComponent(q)}&limit=${limit}`),
   chat: (messages, top_k = 5) => req("POST", "/chat/", { messages, top_k }),
+  home: {
+    digest: () => req("GET", "/home/digest"),
+    activity: () => req("GET", "/home/activity"),
+    suggestions: () => req("GET", "/home/suggestions"),
+  },
+  rss: {
+    status: () => req("GET", "/rss/status"),
+    poll: () => req("POST", "/rss/poll"),
+    digestLatest: () => req("GET", "/rss/digest/latest"),
+    digestGenerate: (date) => req("POST", `/rss/digest/generate${date ? "?date_str=" + date : ""}`),
+  },
   entities: {
     list: (params = {}) => {
       const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null)).toString();

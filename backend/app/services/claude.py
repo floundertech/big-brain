@@ -165,9 +165,50 @@ You have four tools:
 - **web_search**: searches the web. Costs money. ALWAYS tell the user what you're going to search for and wait for their confirmation before calling this.
 - **save_entry**: saves content to the knowledge base. ALWAYS show the user the title and a 2-sentence summary of what you'll save and wait for their confirmation before calling this.
 
+You also have access to RSS feed articles ingested from the user's Miniflux reader. These are stored as entries with source_type="rss" and source_type="rss_digest". When the user asks about recent news, Dynatrace updates, or cybersecurity developments, search these entries. Daily digests summarize all articles from a given day.
+
 For most questions: search_notes first, answer from the results.
 For web research: ask for confirmation, then search, then optionally offer to save the results.
 Be concise and direct."""
+
+
+_DIGEST_PROMPT = """You are a daily briefing assistant. For each article below, provide a one-sentence summary. Flag articles that are relevant to these topics: {topics}.
+
+Respond with ONLY valid JSON (no markdown fences), using this schema:
+{{
+  "categories": [
+    {{
+      "name": "Category Name",
+      "articles": [
+        {{
+          "entry_id": 123,
+          "title": "Article Title",
+          "summary": "One-sentence summary.",
+          "flagged": false,
+          "flag_reason": null
+        }}
+      ]
+    }}
+  ]
+}}
+
+Articles:
+{articles}"""
+
+
+async def generate_digest_summary(articles_json: str, topics: str, model: str | None = None) -> dict:
+    """Generate a structured daily digest from article summaries using Haiku."""
+    use_model = model or settings.rss_digest_model if hasattr(settings, "rss_digest_model") else "claude-haiku-4-5-20251001"
+    prompt = _DIGEST_PROMPT.format(topics=topics or "none specified", articles=articles_json)
+    t0 = time.perf_counter()
+    response = await asyncio.to_thread(
+        client.messages.create,
+        model=use_model,
+        max_tokens=2048,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    _record_usage(response, "generate_digest", time.perf_counter() - t0)
+    return _parse_json(response.content[0].text)
 
 
 async def enrich_entry(text: str) -> dict:
