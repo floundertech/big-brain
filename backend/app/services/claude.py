@@ -204,7 +204,7 @@ async def generate_digest_summary(articles_json: str, topics: str, model: str | 
     response = await asyncio.to_thread(
         client.messages.create,
         model=use_model,
-        max_tokens=2048,
+        max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
     _record_usage(response, "generate_digest", time.perf_counter() - t0)
