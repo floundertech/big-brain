@@ -204,11 +204,17 @@ async def generate_digest_summary(articles_json: str, topics: str, model: str | 
     response = await asyncio.to_thread(
         client.messages.create,
         model=use_model,
-        max_tokens=4096,
+        max_tokens=8192,
         messages=[{"role": "user", "content": prompt}],
     )
     _record_usage(response, "generate_digest", time.perf_counter() - t0)
-    return _parse_json(response.content[0].text)
+    # If response was truncated (hit max_tokens), the JSON will be incomplete.
+    # Try to parse; if it fails, log and return a minimal structure.
+    try:
+        return _parse_json(response.content[0].text)
+    except json.JSONDecodeError:
+        logger.warning("Digest JSON was truncated (stop_reason=%s), returning partial result", response.stop_reason)
+        return {"categories": [{"name": "All Articles", "articles": []}]}
 
 
 async def enrich_entry(text: str) -> dict:
