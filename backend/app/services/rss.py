@@ -2,7 +2,9 @@
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime, date, timedelta, timezone
+from html import unescape
 
 import httpx
 from sqlalchemy import select, text as sa_text
@@ -17,6 +19,23 @@ from ..services.entities import link_entities_to_entry
 logger = logging.getLogger("big-brain.rss")
 
 _SETTINGS_KEY = "rss_last_poll_timestamp"
+
+
+def _strip_html(html: str) -> str:
+    """Convert HTML to plain text by stripping tags and normalizing whitespace."""
+    # Remove style and script blocks entirely
+    text = re.sub(r"<(style|script)[^>]*>.*?</\1>", "", html, flags=re.DOTALL | re.IGNORECASE)
+    # Convert common block elements to newlines
+    text = re.sub(r"<(br|p|div|h[1-6]|li|tr)[^>]*>", "\n", text, flags=re.IGNORECASE)
+    # Strip remaining tags
+    text = re.sub(r"<[^>]+>", " ", text)
+    # Decode HTML entities
+    text = unescape(text)
+    # Normalize whitespace: collapse runs of spaces (but preserve newlines)
+    text = re.sub(r"[^\S\n]+", " ", text)
+    # Collapse multiple blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 _DIGEST_DATE_KEY = "rss_last_digest_date"
 _DIGEST_CHECK_INTERVAL = 900  # 15 minutes
 
@@ -135,8 +154,8 @@ async def _ingest_article(article: dict, feed_info: dict) -> int | None:
 
     title = article.get("title", "Untitled")
     content = article.get("content", "")
-    # Miniflux provides cleaned text; fall back to raw content
-    raw_text = content.strip()
+    # Miniflux returns HTML — strip to plain text
+    raw_text = _strip_html(content)
     if not raw_text:
         logger.warning("Article %d has no content, skipping", miniflux_id)
         return None
