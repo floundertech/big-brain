@@ -7,11 +7,13 @@ import Chat from "./pages/Chat";
 import EntryDetail from "./pages/EntryDetail";
 import EntityDetail from "./pages/EntityDetail";
 import Entities from "./pages/Entities";
+import Pipeline from "./pages/Pipeline";
 
 const nav = [
   { to: "/", label: "Home" },
   { to: "/entries", label: "Browse" },
   { to: "/entities", label: "Entities" },
+  { to: "/pipeline", label: "Pipeline" },
   { to: "/ingest", label: "Add" },
   { to: "/search", label: "Search" },
   { to: "/chat", label: "Chat" },
@@ -49,6 +51,7 @@ export default function App() {
           <Route path="/chat" element={<Chat />} />
           <Route path="/entry/:id" element={<EntryDetail />} />
           <Route path="/entities" element={<Entities />} />
+          <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/entity/:id" element={<EntityDetail />} />
         </Routes>
       </main>

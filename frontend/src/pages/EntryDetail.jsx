@@ -124,6 +124,10 @@ export default function EntryDetail() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showLinker, setShowLinker] = useState(false);
+  const [linkSearch, setLinkSearch] = useState("");
+  const [linkResults, setLinkResults] = useState([]);
+  const [linkSearching, setLinkSearching] = useState(false);
 
   function load() {
     api.entries.get(id).then(setEntry).finally(() => setLoading(false));
@@ -131,6 +135,27 @@ export default function EntryDetail() {
   }
 
   useEffect(() => { load(); }, [id]);
+
+  useEffect(() => {
+    if (!linkSearch.trim()) { setLinkResults([]); return; }
+    const timeout = setTimeout(() => {
+      setLinkSearching(true);
+      api.entities.list({ q: linkSearch }).then(setLinkResults).finally(() => setLinkSearching(false));
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [linkSearch]);
+
+  async function handleLink(entityId) {
+    try {
+      await api.entities.linkEntry(id, { entity_id: entityId });
+      setShowLinker(false);
+      setLinkSearch("");
+      load();
+    } catch (err) {
+      // 409 = already linked
+      if (err.message.includes("409")) alert("Already linked to this entity.");
+    }
+  }
 
   async function save(updates) {
     setSaving(true);
@@ -189,21 +214,68 @@ export default function EntryDetail() {
           </span>
           <TagEditor tags={entry.tags} onSave={(tags) => save({ tags })} />
         </div>
-        {entities.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {entities.map((e) => (
+        <div className="flex flex-wrap gap-2 mt-2 items-center">
+          {entities.map((e) => {
+            const pill =
+              e.entity_type === "contact" ? "border-violet-800 text-violet-400 hover:border-violet-600" :
+              e.entity_type === "account" ? "border-amber-900 text-amber-500 hover:border-amber-700" :
+              e.entity_type === "opportunity" ? "border-cyan-900 text-cyan-400 hover:border-cyan-700" :
+              "border-neutral-700 text-neutral-400 hover:border-neutral-500";
+            return (
               <Link
                 key={e.id}
                 to={`/entity/${e.id}`}
-                className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                  e.entity_type === "contact"
-                    ? "border-violet-800 text-violet-400 hover:border-violet-600"
-                    : "border-amber-900 text-amber-500 hover:border-amber-700"
-                }`}
+                className={`text-xs px-2 py-0.5 rounded border transition-colors ${pill}`}
               >
                 {e.name}
               </Link>
-            ))}
+            );
+          })}
+          <button
+            onClick={() => setShowLinker(!showLinker)}
+            className="text-xs px-2 py-0.5 rounded border border-dashed border-neutral-700 text-neutral-500 hover:text-neutral-300 hover:border-neutral-500 transition-colors"
+          >
+            + Link
+          </button>
+        </div>
+
+        {showLinker && (
+          <div className="mt-2 p-3 bg-neutral-900 border border-neutral-800 rounded-lg">
+            <input
+              type="text"
+              value={linkSearch}
+              onChange={(e) => setLinkSearch(e.target.value)}
+              placeholder="Search entities to link..."
+              autoFocus
+              className="w-full text-sm bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-neutral-500 mb-2"
+            />
+            {linkSearching && <p className="text-xs text-neutral-500">Searching...</p>}
+            {linkResults.length > 0 && (
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {linkResults
+                  .filter((e) => !entities.some((ex) => ex.id === e.id))
+                  .map((e) => {
+                    const typeLabel =
+                      e.entity_type === "contact" ? "Contact" :
+                      e.entity_type === "account" ? "Account" :
+                      e.entity_type === "opportunity" ? "Opportunity" :
+                      e.entity_type;
+                    return (
+                      <button
+                        key={e.id}
+                        onClick={() => handleLink(e.id)}
+                        className="w-full text-left px-2 py-1.5 rounded hover:bg-neutral-800 transition-colors flex items-center gap-2"
+                      >
+                        <span className="text-sm text-neutral-300">{e.name}</span>
+                        <span className="text-xs text-neutral-600">{typeLabel}</span>
+                      </button>
+                    );
+                  })}
+              </div>
+            )}
+            {linkSearch && !linkSearching && linkResults.length === 0 && (
+              <p className="text-xs text-neutral-500">No entities found.</p>
+            )}
           </div>
         )}
       </div>

@@ -181,7 +181,7 @@ TOOLS = [
                 "entity_type": {
                     "type": "string",
                     "description": "Type of entity",
-                    "enum": ["organization", "contact"],
+                    "enum": ["organization", "contact", "account", "opportunity"],
                 },
                 "name": {"type": "string", "description": "Entity name"},
                 "meta": {

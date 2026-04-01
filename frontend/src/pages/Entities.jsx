@@ -36,9 +36,17 @@ export default function Entities() {
   }
 
   const typePill = (type) =>
-    type === "contact"
-      ? "border border-violet-800 text-violet-400"
-      : "border border-amber-900 text-amber-500";
+    type === "contact" ? "border border-violet-800 text-violet-400" :
+    type === "account" ? "border border-amber-900 text-amber-500" :
+    type === "opportunity" ? "border border-cyan-900 text-cyan-400" :
+    "border border-neutral-700 text-neutral-400";
+
+  const typeLabels = {
+    contact: "Contact",
+    account: "Account",
+    organization: "Organization",
+    opportunity: "Opportunity",
+  };
 
   return (
     <div>
@@ -52,7 +60,9 @@ export default function Entities() {
           >
             <option value="">All types</option>
             <option value="contact">Contacts</option>
+            <option value="account">Accounts</option>
             <option value="organization">Organizations</option>
+            <option value="opportunity">Opportunities</option>
           </select>
           <button
             onClick={() => setShowCreate(!showCreate)}
@@ -84,7 +94,9 @@ export default function Entities() {
                 className="text-sm bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-neutral-300"
               >
                 <option value="contact">Contact</option>
+                <option value="account">Account</option>
                 <option value="organization">Organization</option>
+                <option value="opportunity">Opportunity</option>
               </select>
             </div>
             <div className="flex-1">
@@ -123,7 +135,7 @@ export default function Entities() {
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-white">{entity.name}</span>
                 <span className={`text-xs px-1.5 py-0.5 rounded ${typePill(entity.entity_type)}`}>
-                  {entity.entity_type === "contact" ? "Contact" : "Organization"}
+                  {typeLabels[entity.entity_type] || entity.entity_type}
                 </span>
               </div>
               {entity.meta?.summary && (

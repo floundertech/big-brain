@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.database import init_db
 from .core.config import settings
 from .services.embeddings import get_model
-from .api import entries, search, chat, entities, rss, home
+from .api import entries, search, chat, entities, rss, home, pipeline
 
 logger = logging.getLogger("big-brain.telemetry")
 
@@ -126,6 +126,7 @@ app.include_router(chat.router)
 app.include_router(entities.router)
 app.include_router(rss.router)
 app.include_router(home.router)
+app.include_router(pipeline.router)
 
 
 @app.get("/health")

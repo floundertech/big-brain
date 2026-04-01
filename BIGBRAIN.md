@@ -15,15 +15,17 @@ finances, homelab, learning. You ask it anything, it knows. Not a PKM tool that
 becomes a write-only graveyard — a system that captures passively and retrieves
 effortlessly.
 
-## Current State (V2)
+## Current State (V3)
 
-A working foundation with entity relationships. Single `docker compose up`.
+Full entity system with CRM-like pipeline management. Single `docker compose up`.
 
-- **Ingest:** paste text or upload `.txt` — Claude auto-generates title, summary, tags; extracts people and organizations
-- **Browse:** list/filter entries by type (note | transcript)
+- **Ingest:** paste text or upload `.txt` — Claude auto-generates title, summary, tags; extracts contacts and organizations
+- **Browse:** list/filter entries by type (note | transcript | email | research | rss)
 - **Search:** semantic vector search (fastembed + nomic-embed-text-v1.5, local CPU)
-- **Chat:** RAG chat — ask questions, Claude answers from your notes with source citations
-- **Entity pages:** click a person or organization name → see all entries mentioning them; entity-focused retrieval patterns
+- **Chat:** RAG chat with 7 tools — search notes, get entity, web search, save entry, link entity, create entity, update entity
+- **Entities:** contacts, accounts, organizations, opportunities — inline editing, relationship management, semantic matching
+- **Pipeline:** tabbed view for sales workflow — pipeline overview, by-account, by-rep, weekly activity
+- **Entry editing:** inline click-to-edit on title, summary, tags, full text; quick-link entities from entry detail page
 
 ### Stack
 | Layer | Tech |

@@ -65,4 +65,20 @@ export const api = {
     linkEntry: (entryId, data) => req("POST", `/entities/entries/${entryId}/entities`, data),
     unlinkEntry: (linkId) => req("DELETE", `/entities/entry-entity-links/${linkId}`),
   },
+  pipeline: {
+    opportunities: (params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null)).toString();
+      return req("GET", `/pipeline/opportunities${qs ? "?" + qs : ""}`);
+    },
+    accounts: (params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null)).toString();
+      return req("GET", `/pipeline/accounts${qs ? "?" + qs : ""}`);
+    },
+    reps: () => req("GET", "/pipeline/reps"),
+    byRep: (rep) => req("GET", `/pipeline/by-rep/${encodeURIComponent(rep)}`),
+    weeklyActivity: (params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null)).toString();
+      return req("GET", `/pipeline/weekly-activity${qs ? "?" + qs : ""}`);
+    },
+  },
 };

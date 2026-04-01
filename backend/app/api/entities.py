@@ -182,8 +182,9 @@ async def get_entity(entity_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/", response_model=EntityOut, status_code=201)
 async def create_entity(body: EntityCreate, db: AsyncSession = Depends(get_db)):
-    if body.entity_type not in ("contact", "organization"):
-        raise HTTPException(status_code=400, detail="entity_type must be 'contact' or 'organization'")
+    _VALID_TYPES = ("contact", "organization", "account", "opportunity")
+    if body.entity_type not in _VALID_TYPES:
+        raise HTTPException(status_code=400, detail=f"entity_type must be one of {_VALID_TYPES}")
     entity = Entity(
         entity_type=body.entity_type,
         name=body.name.strip(),
