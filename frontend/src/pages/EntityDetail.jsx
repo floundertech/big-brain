@@ -278,12 +278,22 @@ export default function EntityDetail() {
               onChange={(e) => setRelType(e.target.value)}
               className="text-sm bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-neutral-300"
             >
-              <option value="works_at">Works At</option>
-              <option value="opportunity_for">Opportunity For</option>
-              <option value="reports_to">Reports To</option>
-              <option value="primary_contact">Primary Contact</option>
-              <option value="partner">Partner</option>
-              <option value="formerly_at">Formerly At</option>
+              <optgroup label="People → Accounts/Orgs">
+                <option value="works_at">Works At (employee of)</option>
+                <option value="sales_rep_for">Sales Rep For (covers account)</option>
+                <option value="se_for">SE For (supports account)</option>
+                <option value="primary_contact">Primary Contact (at customer)</option>
+                <option value="champion">Champion (internal advocate)</option>
+                <option value="reports_to">Reports To</option>
+                <option value="formerly_at">Formerly At</option>
+              </optgroup>
+              <optgroup label="Opportunities">
+                <option value="opportunity_for">Opportunity For (opp → account)</option>
+              </optgroup>
+              <optgroup label="General">
+                <option value="partner">Partner</option>
+                <option value="related_to">Related To</option>
+              </optgroup>
             </select>
           </div>
           <input
