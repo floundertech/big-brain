@@ -20,7 +20,7 @@ services:
     build: ./backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://bigbrain:${POSTGRES_PASSWORD:-changeme}@db:5432/bigbrain
+      DATABASE_URL: ${DATABASE_URL:-postgresql://bigbrain:${POSTGRES_PASSWORD:-changeme}@db:5432/bigbrain}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       EMBED_MODEL: ${EMBED_MODEL:-nomic-ai/nomic-embed-text-v1.5}
