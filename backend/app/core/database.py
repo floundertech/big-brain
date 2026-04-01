@@ -40,8 +40,8 @@ async def init_db():
         ))
         # Migrate legacy entry_entities → entry_entity_links
         await conn.execute(text("""
-            INSERT INTO entry_entity_links (entry_id, entity_id, link_type, confidence)
-            SELECT ee.entry_id, ee.entity_id, 'mention', 1.0
+            INSERT INTO entry_entity_links (entry_id, entity_id, link_type, confidence, created_at)
+            SELECT ee.entry_id, ee.entity_id, 'mention', 1.0, now()
             FROM entry_entities ee
             WHERE NOT EXISTS (
                 SELECT 1 FROM entry_entity_links eel
