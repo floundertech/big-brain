@@ -35,6 +35,7 @@ export const api = {
       fd.append("source_type", sourceType);
       return req("POST", "/entries/upload", fd, true);
     },
+    update: (id, data) => req("PATCH", `/entries/${id}`, data),
     delete: (id) => req("DELETE", `/entries/${id}`),
   },
   search: (q, limit = 10) => req("GET", `/search/?q=${encodeURIComponent(q)}&limit=${limit}`),
@@ -56,5 +57,12 @@ export const api = {
       return req("GET", `/entities/${qs ? "?" + qs : ""}`);
     },
     get: (id) => req("GET", `/entities/${id}`),
+    create: (data) => req("POST", "/entities/", data),
+    update: (id, data) => req("PATCH", `/entities/${id}`, data),
+    delete: (id) => req("DELETE", `/entities/${id}`),
+    addRelationship: (id, data) => req("POST", `/entities/${id}/relationships`, data),
+    deleteRelationship: (id) => req("DELETE", `/entities/relationships/${id}`),
+    linkEntry: (entryId, data) => req("POST", `/entities/entries/${entryId}/entities`, data),
+    unlinkEntry: (linkId) => req("DELETE", `/entities/entry-entity-links/${linkId}`),
   },
 };

@@ -67,7 +67,7 @@ export default function EntryDetail() {
                 key={e.id}
                 to={`/entity/${e.id}`}
                 className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                  e.entity_type === "person"
+                  e.entity_type === "contact"
                     ? "border-violet-800 text-violet-400 hover:border-violet-600"
                     : "border-amber-900 text-amber-500 hover:border-amber-700"
                 }`}

@@ -1,5 +1,65 @@
 # Session Summaries
 
+## Session 13: Entity System & Relationship Intelligence (2026-03-31)
+
+### Goal
+Implement full CRM-like entity layer per the Entity System spec — 5 phases covering data model, extraction/matching pipeline, Gmail label routing, edit capabilities, and rich detail views.
+
+### What Got Built
+
+**Phase 1 — Enhanced Data Model (3 files)**
+- `models.py`: Entity expanded with `meta` JSONB, `embedding` vector, `updated_at`. New `EntityRelationship` table. New `EntryEntityLink` table (replaces EntryEntity with link_type + confidence). Entity type `person` → `contact`.
+- `database.py`: `init_db()` handles migration: ALTER TABLE for new columns, data migration from entry_entities → entry_entity_links, person → contact rename.
+
+**Phase 2 — Entity Extraction & Matching Pipeline (3 files)**
+- `services/entity_resolver.py`: Structured extraction via Haiku, semantic matching against entity embeddings, three-outcome resolution (matched/ambiguous/new).
+- `services/claude.py`: Three new chat tools added to TOOLS (link_entity, create_entity, update_entity). System prompt updated for 7 tools.
+- `api/chat.py`: Tool implementations for link_entity, create_entity, update_entity wired into chat loop.
+
+**Phase 3 — Gmail Label-Based Routing (1 file)**
+- `services/gmail.py`: Poller now iterates over 4 labels (big-brain, customer, research, reference). Forwarded email parsing (Gmail/Outlook/Apple Mail patterns). Composite dedup for forwarded emails.
+- `core/config.py`: New env vars for label routing.
+
+**Phase 4 — Edit Capabilities (3 files)**
+- `api/entities.py`: Full CRUD, relationship management, entry-entity linking/unlinking endpoints.
+- `api/entries.py`: PATCH endpoint for entry editing with re-embedding and re-chunking.
+- `services/entities.py`: Updated to use EntryEntityLink, added `embed_entity()` helper.
+
+**Phase 5 — Frontend (4 files)**
+- `pages/Entities.jsx`: New entity list page with search, type filter, inline creation.
+- `pages/EntityDetail.jsx`: Rich detail view with inline editing, type-specific meta fields, relationships, contact lists, interaction/research sections.
+- `App.jsx`: Added `/entities` route and nav tab.
+- `api.js`: Added entity CRUD, relationship, and linking API methods + entry update.
+
+### Key Design Decisions
+
+**Int PKs over UUIDs** — Spec called for UUIDs but existing codebase uses int PKs everywhere. Kept int for consistency.
+
+**Legacy EntryEntity kept** — The old `entry_entities` table model is preserved so `create_all()` doesn't drop it. Data migrated to `entry_entity_links` in init_db().
+
+**Haiku for extraction, Sonnet for chat** — Entity extraction is high-volume structured output, well suited for Haiku. Chat and summary generation stay on Sonnet.
+
+**Meta merge, not replace** — PATCH on entity meta merges fields into existing dict rather than replacing, preventing accidental data loss.
+
+**Forwarded email detection** — Three regex patterns cover Gmail, Outlook, and Apple Mail forwarding conventions. Parsed metadata stored in entry.meta for downstream use.
+
+### What's NOT here
+- Batch retroactive entity extraction on existing entries (too expensive to run automatically)
+- Entity merge/dedup UI
+- Relationship graph visualization
+- Auto-summarization of entity timelines
+- Proactive entity extraction on RSS articles (would need separate config flag)
+
+### Migration Notes
+- `init_db()` handles all schema changes automatically on startup
+- For manual migration: see SQL in CLAUDE.md
+- Entity type `person` → `contact` is applied automatically; frontend updated accordingly
+
+### Next Up
+- Entity search integration into global search results
+- Batch entity extraction on historical entries (optional endpoint)
+- Relationship graph visualization
+
 ## Session 1: Entity Model Implementation (2026-03-20)
 
 ### Goal

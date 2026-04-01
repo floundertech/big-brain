@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     gmail_poll_interval_seconds: int = 300
     gmail_ingest_label: str = "big-brain"
     gmail_done_label: str = "big-brain/done"
+    # Label-based routing (JSON string of label configs)
+    gmail_label_customer: str = "big-brain/customer"
+    gmail_label_research: str = "big-brain/research"
+    gmail_label_reference: str = "big-brain/reference"
+    gmail_remove_label_after_processing: bool = False
     # RSS / Miniflux
     miniflux_url: str | None = None
     miniflux_api_key: str | None = None

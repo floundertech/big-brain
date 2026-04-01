@@ -1,7 +1,7 @@
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, delete, or_
 from pydantic import BaseModel
 from ..core.database import get_db
 from ..core.models import Entry, Chunk
@@ -123,6 +123,45 @@ async def get_entry(entry_id: int, db: AsyncSession = Depends(get_db)):
     entry = await db.get(Entry, entry_id)
     if not entry:
         raise HTTPException(status_code=404, detail="Not found")
+    return entry
+
+
+class EntryUpdate(BaseModel):
+    raw_text: str | None = None
+    title: str | None = None
+    summary: str | None = None
+    tags: list[str] | None = None
+    meta: dict | None = None
+
+
+@router.patch("/{entry_id}", response_model=EntryDetail)
+async def update_entry(
+    entry_id: int, body: EntryUpdate, db: AsyncSession = Depends(get_db)
+):
+    entry = await db.get(Entry, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    if body.title is not None:
+        entry.title = body.title
+    if body.summary is not None:
+        entry.summary = body.summary
+    if body.tags is not None:
+        entry.tags = body.tags
+    if body.meta is not None:
+        existing = entry.meta or {}
+        existing.update(body.meta)
+        entry.meta = existing
+
+    if body.raw_text is not None:
+        entry.raw_text = body.raw_text
+        entry.embedding = embed(body.raw_text)
+        # Re-chunk
+        await db.execute(delete(Chunk).where(Chunk.entry_id == entry_id))
+        await _create_chunks(db, entry_id, body.raw_text)
+
+    await db.commit()
+    await db.refresh(entry)
     return entry
 
 

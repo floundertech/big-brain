@@ -155,15 +155,77 @@ TOOLS = [
             "required": ["text", "title"],
         },
     },
+    {
+        "name": "link_entity",
+        "description": "Link an existing entry to an organization or contact entity by name.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entry_id": {"type": "integer", "description": "ID of the entry to link"},
+                "entity_name": {"type": "string", "description": "Name of the entity to search for and link"},
+                "link_type": {
+                    "type": "string",
+                    "description": "Type of link: mention, about, from, or to",
+                    "enum": ["mention", "about", "from", "to"],
+                },
+            },
+            "required": ["entry_id", "entity_name"],
+        },
+    },
+    {
+        "name": "create_entity",
+        "description": "Create a new organization or contact entity in the knowledge base.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "description": "Type of entity",
+                    "enum": ["organization", "contact"],
+                },
+                "name": {"type": "string", "description": "Entity name"},
+                "meta": {
+                    "type": "object",
+                    "description": "Structured fields (title, industry, email, etc.)",
+                },
+                "related_to": {
+                    "type": "string",
+                    "description": "Optional entity name to create a relationship with",
+                },
+            },
+            "required": ["entity_type", "name"],
+        },
+    },
+    {
+        "name": "update_entity",
+        "description": "Update fields on an existing entity (by ID or name search).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity_id_or_name": {
+                    "type": "string",
+                    "description": "Entity ID (numeric) or name to search for",
+                },
+                "updates": {
+                    "type": "object",
+                    "description": "Object of meta fields to update",
+                },
+            },
+            "required": ["entity_id_or_name", "updates"],
+        },
+    },
 ]
 
 _AGENTIC_SYSTEM = """You are a knowledgeable assistant with access to the user's personal knowledge base and the web.
 
-You have four tools:
+You have seven tools:
 - **search_notes**: searches the user's personal notes semantically. Use this liberally — it's fast and free.
-- **get_entity**: looks up a specific person or organization and their linked notes.
+- **get_entity**: looks up a specific person or organization and their linked notes, including metadata like title, industry, and engagement status.
 - **web_search**: searches the web. Costs money. ALWAYS tell the user what you're going to search for and wait for their confirmation before calling this.
 - **save_entry**: saves content to the knowledge base. ALWAYS show the user the title and a 2-sentence summary of what you'll save and wait for their confirmation before calling this.
+- **link_entity**: links an entry to an entity by name. Use when the user mentions a person or org in relation to a specific note.
+- **create_entity**: creates a new contact or organization entity. Use when the user mentions someone or some company that should be tracked.
+- **update_entity**: updates metadata on an existing entity (title, industry, notes, etc.).
 
 You also have access to RSS feed articles ingested from the user's Miniflux reader. These are stored as entries with source_type="rss" and source_type="rss_digest". When the user asks about recent news, Dynatrace updates, or cybersecurity developments, search these entries. Daily digests summarize all articles from a given day.
 

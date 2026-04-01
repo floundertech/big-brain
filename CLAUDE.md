@@ -1,23 +1,51 @@
 # Session Notes
 
 ## Active branch
-`claude/second-brain-platform-design-lkCxq` — Session 12 in progress (Gmail connector).
+`feature/entity-system` — Session 13 (Entity System & Relationship Intelligence).
 
-## Current state (2026-03-22)
+## Current state (2026-03-31)
 
-Session 12 complete. Added Gmail connector (Layer 2d): label-based email ingestion with OAuth2 and a background asyncio poller.
+Session 13 complete. Full entity system overhaul implementing CRM-like entity layer with 5 phases.
 
 Key implementation details:
-- `services/gmail.py`: `run_poller()` long-running background task, `poll_once()` single cycle. Started in lifespan via `asyncio.create_task()`.
-- Label convention: apply `big-brain` → ingested → label swapped to `big-brain/done`. Labels auto-created if missing.
-- MIME parsing: `text/plain` preferred, HTML stripped as fallback. From/Date/Subject prepended to body for richer enrichment context.
-- Normal ingest pipeline reused: `enrich_entry()` → `embed()` → `chunk_text()` → `extract_entities()` → `link_entities_to_entry()`.
-- `Entry.gmail_message_id` nullable unique column added for dedup.
-- `scripts/gmail_auth.py`: one-time CLI OAuth2 flow. Run on host (needs browser). Writes `gmail_token.json`. Silently refreshes expired tokens on subsequent runs.
-- `credentials.json` and `gmail_token.json` added to `.gitignore`.
-- New env vars: `GMAIL_POLL_INTERVAL_SECONDS` (default 300), `GMAIL_INGEST_LABEL` (default `big-brain`), `GMAIL_DONE_LABEL` (default `big-brain/done`).
-- Poller silently skips if `gmail_token.json` is absent — Gmail is opt-in, nothing breaks without it.
-- New dependencies: `google-api-python-client`, `google-auth-httplib2`, `google-auth-oauthlib`.
+
+**Phase 1 — Enhanced Data Model:**
+- `Entity` model expanded: added `meta` (JSONB), `embedding` (vector 768), `updated_at`. Entity type renamed from `person` → `contact`.
+- New `EntityRelationship` table: source/target entity IDs, relationship_type (works_at, reports_to, etc.), meta JSONB.
+- New `EntryEntityLink` table replaces `EntryEntity` (kept for migration): adds `link_type` (mention/about/from/to), `confidence` (float).
+- `init_db()` handles migration: ALTERs existing entities table, migrates entry_entities → entry_entity_links, renames person → contact.
+
+**Phase 2 — Entity Extraction & Matching Pipeline:**
+- `services/entity_resolver.py`: structured extraction via Haiku, semantic matching against entity embeddings, three-outcome resolution (matched/ambiguous/new).
+- Three new chat tools: `link_entity`, `create_entity`, `update_entity` — added to TOOLS list and chat loop.
+- `embed_entity()` helper generates embeddings for entities using `"{type}: {name}. {summary}"` format.
+
+**Phase 3 — Gmail Label-Based Routing:**
+- Gmail poller now iterates over multiple labels: `big-brain`, `big-brain/customer`, `big-brain/research`, `big-brain/reference`.
+- Each label routes to a pipeline (default, customer_interaction, research, reference).
+- Forwarded email parsing: detects Gmail/Outlook/Apple Mail forwarding patterns, extracts original sender/date/subject, separates user annotation.
+- Composite dedup key for forwarded emails: `original_sender|original_date|original_subject`.
+- New env vars: `GMAIL_LABEL_CUSTOMER`, `GMAIL_LABEL_RESEARCH`, `GMAIL_LABEL_REFERENCE`, `GMAIL_REMOVE_LABEL_AFTER_PROCESSING`.
+
+**Phase 4 — Edit Capabilities:**
+- Full entity CRUD: `POST/PATCH/DELETE /entities/`, `POST/DELETE` for relationships, entry-entity linking.
+- `PATCH /entries/{id}` for entry editing (re-embeds and re-chunks on raw_text change).
+- Meta updates merge fields rather than replacing.
+
+**Phase 5 — Entity Detail Views + Frontend:**
+- New `/entities` page: searchable/filterable entity list with inline creation form.
+- Enhanced entity detail view: inline field editing (click-to-edit), type-specific meta fields, relationship display, contacts section for orgs, interactions and research sections.
+- Navigation updated with "Entities" tab.
+- All entity type references updated from `person` → `contact` across frontend.
+
+**DB migration for existing installs:**
+```sql
+ALTER TABLE entities ADD COLUMN IF NOT EXISTS meta jsonb;
+ALTER TABLE entities ADD COLUMN IF NOT EXISTS embedding vector(768);
+ALTER TABLE entities ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+UPDATE entities SET entity_type = 'contact' WHERE entity_type = 'person';
+-- entry_entity_links table and data migration handled automatically by init_db()
+```
 - **DB migration for existing installs:** `ALTER TABLE entries ADD COLUMN IF NOT EXISTS gmail_message_id varchar(200) UNIQUE;`
 
 ---

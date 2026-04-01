@@ -1,14 +1,14 @@
 import asyncio
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+from sqlalchemy import text, select
 from pydantic import BaseModel
 
 from ..core.database import get_db
-from ..core.models import Entry
+from ..core.models import Entry, Entity, EntryEntityLink, EntityRelationship
 from ..services.embeddings import embed
 from ..services.claude import chat_turn, enrich_entry, extract_entities
-from ..services.entities import link_entities_to_entry
+from ..services.entities import link_entities_to_entry, embed_entity
 from ..services.pii import scrub_pii
 from ..services.tavily import web_search as tavily_search
 
@@ -75,7 +75,7 @@ async def _search_notes(query: str, db: AsyncSession, top_k: int = 5) -> tuple[s
 
 async def _get_entity(name: str, db: AsyncSession) -> str:
     result = await db.execute(
-        text("SELECT id, entity_type, name FROM entities WHERE lower(name) LIKE :pat LIMIT 5"),
+        text("SELECT id, entity_type, name, meta FROM entities WHERE lower(name) LIKE :pat LIMIT 5"),
         {"pat": f"%{name.lower()}%"},
     )
     entities = result.mappings().all()
@@ -87,8 +87,8 @@ async def _get_entity(name: str, db: AsyncSession) -> str:
         result2 = await db.execute(
             text("""
                 SELECT e.id, e.title, e.summary FROM entries e
-                JOIN entry_entities ee ON ee.entry_id = e.id
-                WHERE ee.entity_id = :eid
+                JOIN entry_entity_links eel ON eel.entry_id = e.id
+                WHERE eel.entity_id = :eid
                 ORDER BY e.created_at DESC LIMIT 10
             """),
             {"eid": ent["id"]},
@@ -97,8 +97,12 @@ async def _get_entity(name: str, db: AsyncSession) -> str:
         entry_lines = "\n".join(
             f"  - [{r['title']}] {r['summary'] or ''}" for r in linked
         )
+        meta = ent["meta"] or {}
+        meta_lines = ""
+        if meta:
+            meta_lines = "\n".join(f"  {k}: {v}" for k, v in meta.items() if v) + "\n"
         parts.append(
-            f"{ent['entity_type'].title()}: {ent['name']}\nLinked entries:\n{entry_lines or '  (none)'}"
+            f"{ent['entity_type'].title()}: {ent['name']}\n{meta_lines}Linked entries:\n{entry_lines or '  (none)'}"
         )
     return "\n\n".join(parts)
 
@@ -141,6 +145,91 @@ async def _save_entry(text_content: str, title: str, sources: list[str], db: Asy
     await db.commit()
 
     return f"Saved as entry #{entry.id}: '{title}'"
+
+
+async def _link_entity(entry_id: int, entity_name: str, link_type: str, db: AsyncSession) -> str:
+    entry = await db.get(Entry, entry_id)
+    if not entry:
+        return f"Entry #{entry_id} not found."
+
+    result = await db.execute(
+        select(Entity).where(Entity.name.ilike(f"%{entity_name}%"))
+    )
+    entity = result.scalar_one_or_none()
+    if not entity:
+        return f"No entity found matching '{entity_name}'. Use create_entity to create one first."
+
+    existing = await db.execute(
+        select(EntryEntityLink.id).where(
+            EntryEntityLink.entry_id == entry_id,
+            EntryEntityLink.entity_id == entity.id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        return f"Entry #{entry_id} is already linked to '{entity.name}'."
+
+    db.add(EntryEntityLink(
+        entry_id=entry_id,
+        entity_id=entity.id,
+        link_type=link_type or "mention",
+        confidence=1.0,
+    ))
+    await db.commit()
+    return f"Linked entry #{entry_id} to {entity.entity_type} '{entity.name}' as '{link_type}'."
+
+
+async def _create_entity(
+    entity_type: str, name: str, meta: dict | None, related_to: str | None, db: AsyncSession
+) -> str:
+    entity = Entity(
+        entity_type=entity_type,
+        name=name.strip(),
+        meta=meta,
+    )
+    db.add(entity)
+    await db.commit()
+    await db.refresh(entity)
+    await embed_entity(db, entity.id)
+
+    if related_to:
+        result = await db.execute(
+            select(Entity).where(Entity.name.ilike(f"%{related_to}%"))
+        )
+        related = result.scalar_one_or_none()
+        if related:
+            rel_type = "works_at" if entity_type == "contact" else "partner"
+            db.add(EntityRelationship(
+                source_entity_id=entity.id,
+                target_entity_id=related.id,
+                relationship_type=rel_type,
+            ))
+            await db.commit()
+            return f"Created {entity_type} '{name}' (#{entity.id}) and linked to '{related.name}' ({rel_type})."
+
+    return f"Created {entity_type} '{name}' (#{entity.id})."
+
+
+async def _update_entity(entity_id_or_name: str, updates: dict, db: AsyncSession) -> str:
+    entity = None
+    if entity_id_or_name.isdigit():
+        entity = await db.get(Entity, int(entity_id_or_name))
+    if not entity:
+        result = await db.execute(
+            select(Entity).where(Entity.name.ilike(f"%{entity_id_or_name}%"))
+        )
+        entity = result.scalar_one_or_none()
+    if not entity:
+        return f"No entity found matching '{entity_id_or_name}'."
+
+    existing_meta = entity.meta or {}
+    existing_meta.update(updates)
+    entity.meta = existing_meta
+    await db.commit()
+
+    if "summary" in updates:
+        await embed_entity(db, entity.id)
+
+    return f"Updated {entity.entity_type} '{entity.name}' with: {', '.join(updates.keys())}."
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +276,23 @@ async def chat(req: ChatRequest, db: AsyncSession = Depends(get_db)):
                 elif block.name == "save_entry":
                     result_text = await _save_entry(
                         inp["text"], inp["title"], inp.get("sources", []), db
+                    )
+
+                elif block.name == "link_entity":
+                    result_text = await _link_entity(
+                        inp["entry_id"], inp["entity_name"],
+                        inp.get("link_type", "mention"), db
+                    )
+
+                elif block.name == "create_entity":
+                    result_text = await _create_entity(
+                        inp["entity_type"], inp["name"],
+                        inp.get("meta"), inp.get("related_to"), db
+                    )
+
+                elif block.name == "update_entity":
+                    result_text = await _update_entity(
+                        inp["entity_id_or_name"], inp["updates"], db
                     )
 
                 tool_results.append({

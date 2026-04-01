@@ -172,11 +172,15 @@ Label any Gmail message `big-brain` → it gets ingested automatically. The poll
 4. `gmail_token.json` is written to the project root (gitignored). Restart the app — the poller starts automatically.
 
 ### Entities
-People and organizations are extracted automatically from every entry and stored as first-class entities.
+People (contacts) and organizations are extracted automatically from every entry and stored as first-class entities with rich metadata, relationships, and linked interactions.
 
-- Click a person or organization name on any entry detail page to see their entity page
-- Entity page shows every entry that mentions them
-- API filterable: `GET /entities/?entity_type=person`, `GET /entities/?entry_id=123`
+- **Entity list** (`/entities`): searchable, filterable by type (contact/organization), with inline creation
+- **Entity detail pages**: click any entity name to see their full profile — metadata, relationships, contacts (for orgs), linked interactions, and related research
+- **Inline editing**: click any field on an entity detail page to edit it (title, industry, status, notes, etc.)
+- **Relationships**: link contacts to organizations (works_at), track reporting lines, partnerships
+- **Chat tools**: create, update, and link entities directly from the chat interface
+- **Semantic matching**: new entities are matched against existing ones using embedding similarity to prevent duplicates
+- API: `GET /entities/`, `POST /entities/`, `PATCH /entities/:id`, `DELETE /entities/:id`, relationship and linking endpoints
 
 ### PII Scrubbing
 Structured PII (Social Security numbers, driver's license numbers, credit cards, passports, bank account numbers, ITINs, IBANs) is automatically scrubbed before any text is sent to external APIs (Claude, Tavily). Names and general text pass through untouched — they're needed for entity extraction. Your raw data stored locally in Postgres is never modified.
@@ -205,6 +209,10 @@ Structured PII (Social Security numbers, driver's license numbers, credit cards,
 | `GMAIL_POLL_INTERVAL_SECONDS` | No | `300` | How often the Gmail poller checks for new labeled messages. |
 | `GMAIL_INGEST_LABEL` | No | `big-brain` | Gmail label to watch for messages to ingest. |
 | `GMAIL_DONE_LABEL` | No | `big-brain/done` | Label applied after successful ingestion (replaces ingest label). |
+| `GMAIL_LABEL_CUSTOMER` | No | `big-brain/customer` | Gmail label for customer interaction pipeline routing. |
+| `GMAIL_LABEL_RESEARCH` | No | `big-brain/research` | Gmail label for research pipeline routing. |
+| `GMAIL_LABEL_REFERENCE` | No | `big-brain/reference` | Gmail label for reference pipeline routing. |
+| `GMAIL_REMOVE_LABEL_AFTER_PROCESSING` | No | `false` | Remove routing label after processing (instead of keeping it). |
 | `MINIFLUX_URL` | No | — | Miniflux instance URL. Use `host.docker.internal` or host IP, not `localhost`. Both this and `MINIFLUX_API_KEY` must be set to enable RSS. |
 | `MINIFLUX_API_KEY` | No | — | API key from Miniflux Settings → API Keys. |
 | `RSS_POLL_INTERVAL_SECONDS` | No | `3600` | How often to check Miniflux for new articles. |
@@ -239,13 +247,28 @@ chunks
 
 entities
   id            serial PK
-  entity_type   text              ← "person" | "organization"
+  entity_type   text              ← "contact" | "organization"
   name          text              ← normalized, unique per type
+  meta          jsonb             ← type-specific fields (title, industry, email, etc.)
+  embedding     vector(768)       ← semantic search for entity matching
+  created_at    timestamptz
+  updated_at    timestamptz
+
+entity_relationships
+  id            serial PK
+  source_entity_id  FK → entities.id
+  target_entity_id  FK → entities.id
+  relationship_type text          ← "works_at" | "reports_to" | "formerly_at" | etc.
+  meta          jsonb
   created_at    timestamptz
 
-entry_entities
+entry_entity_links
+  id            serial PK
   entry_id      FK → entries.id  (cascade delete)
   entity_id     FK → entities.id (cascade delete)
+  link_type     text              ← "mention" | "about" | "from" | "to"
+  confidence    float             ← 1.0 for manual, <1.0 for auto
+  created_at    timestamptz
 
 settings
   key           varchar(100) PK   ← e.g. "rss_last_poll_timestamp"
@@ -267,8 +290,17 @@ GET    /entries/           List entries (filter: tag, source_type, limit, offset
 GET    /entries/{id}       Entry detail
 DELETE /entries/{id}       Delete entry
 
-GET    /entities/          List entities (filter: entity_type, entry_id)
-GET    /entities/{id}      Entity detail with all linked entries
+PATCH  /entries/{id}       Update entry content/metadata
+
+GET    /entities/          List entities (filter: entity_type, search: q)
+GET    /entities/{id}      Entity detail with relationships and linked entries
+POST   /entities/          Create entity
+PATCH  /entities/{id}      Update entity fields
+DELETE /entities/{id}      Delete entity
+POST   /entities/{id}/relationships    Add relationship
+DELETE /entities/relationships/{id}    Remove relationship
+POST   /entities/entries/{id}/entities Link entry to entity
+DELETE /entities/entry-entity-links/{id} Unlink
 
 GET    /search/?q=...      Semantic search
 POST   /chat/              RAG chat
@@ -368,7 +400,18 @@ curl -X POST http://localhost:8000/entries/reindex
 ```
 
 **Gmail connector not ingesting messages**
-Check that `gmail_token.json` exists in the project root and is mounted into the container. Backend logs will show `Gmail token not found — poller disabled` on startup if it's missing. If the token is expired, re-run `python backend/scripts/gmail_auth.py`. Make sure the message has the exact label `big-brain` (case-insensitive).
+Check that `gmail_token.json` exists in the project root and is mounted into the container. Backend logs will show `Gmail token not found — poller disabled` on startup if it's missing. If the token is expired, re-run `python backend/scripts/gmail_auth.py`. The poller watches multiple labels: `big-brain`, `big-brain/customer`, `big-brain/research`, `big-brain/reference`. Use the routed labels to classify emails into different pipelines.
+
+**Updating from a version before the entity system overhaul**
+The entity type `person` has been renamed to `contact` and the `entry_entities` table has been replaced by `entry_entity_links`. These migrations run automatically on startup via `init_db()`. If you need to run them manually:
+```bash
+docker compose exec db psql -U postgres bigbrain -c "
+  ALTER TABLE entities ADD COLUMN IF NOT EXISTS meta jsonb;
+  ALTER TABLE entities ADD COLUMN IF NOT EXISTS embedding vector(768);
+  ALTER TABLE entities ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+  UPDATE entities SET entity_type = 'contact' WHERE entity_type = 'person';
+"
+```
 
 **Updating from a version before Gmail connector (`gmail_message_id` column missing)**
 Run once against the existing DB:

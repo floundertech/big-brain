@@ -1,54 +1,258 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../api";
 import EntryCard from "../components/EntryCard";
+
+function InlineEdit({ value, onSave, className = "" }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || "");
+  const inputRef = useRef(null);
+
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+
+  function save() {
+    setEditing(false);
+    if (draft !== (value || "")) onSave(draft);
+  }
+
+  if (!editing) {
+    return (
+      <span
+        onClick={() => { setDraft(value || ""); setEditing(true); }}
+        className={`cursor-pointer hover:text-white transition-colors ${className}`}
+      >
+        {value || <span className="text-neutral-600 italic">Click to edit</span>}
+      </span>
+    );
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+      className="bg-neutral-800 border border-neutral-600 rounded px-2 py-0.5 text-sm text-neutral-300 focus:outline-none focus:border-neutral-400"
+    />
+  );
+}
+
+function MetaField({ label, value, onSave }) {
+  return (
+    <div className="flex items-baseline gap-2 py-1">
+      <span className="text-xs text-neutral-500 w-28 shrink-0">{label}:</span>
+      <InlineEdit value={value} onSave={onSave} className="text-sm text-neutral-300" />
+    </div>
+  );
+}
 
 export default function EntityDetail() {
   const { id } = useParams();
   const [entity, setEntity] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  function load() {
     api.entities.get(id).then(setEntity).finally(() => setLoading(false));
-  }, [id]);
+  }
+
+  useEffect(() => { load(); }, [id]);
+
+  async function updateMeta(field, value) {
+    await api.entities.update(id, { meta: { [field]: value } });
+    load();
+  }
+
+  async function updateName(name) {
+    await api.entities.update(id, { name });
+    load();
+  }
+
+  async function removeRelationship(relId) {
+    await api.entities.deleteRelationship(relId);
+    load();
+  }
 
   if (loading) return <div className="text-neutral-500 text-sm">Loading...</div>;
   if (!entity) return <div className="text-neutral-500 text-sm">Not found.</div>;
 
-  const typeLabel = entity.entity_type === "person" ? "Person" : "Organization";
-  const typePill =
-    entity.entity_type === "person"
-      ? "border border-violet-800 text-violet-400"
-      : "border border-amber-900 text-amber-500";
+  const meta = entity.meta || {};
+  const isOrg = entity.entity_type === "organization";
+  const isContact = entity.entity_type === "contact";
+
+  const typePill = isContact
+    ? "border border-violet-800 text-violet-400"
+    : "border border-amber-900 text-amber-500";
+
+  // Split relationships by direction
+  const outgoing = entity.relationships.filter((r) => r.source_entity_id === entity.id);
+  const incoming = entity.relationships.filter((r) => r.target_entity_id === entity.id);
+
+  // For contacts: find the org they work at
+  const worksAt = outgoing.find((r) => r.relationship_type === "works_at");
+
+  // For orgs: find associated contacts
+  const contacts = incoming.filter((r) => r.relationship_type === "works_at");
+
+  // Separate entries by source type for the detail view sections
+  const interactions = entity.entries.filter((e) =>
+    ["email", "transcript", "note"].includes(e.source_type)
+  );
+  const research = entity.entries.filter((e) =>
+    ["research", "rss", "rss_digest"].includes(e.source_type)
+  );
 
   return (
     <div className="max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
-        <Link to="/" className="text-sm text-neutral-500 hover:text-neutral-300 transition-colors">
-          ← Back
+        <Link to="/entities" className="text-sm text-neutral-500 hover:text-neutral-300 transition-colors">
+          ← Entities
         </Link>
       </div>
 
+      {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-white mb-2">{entity.name}</h1>
-        <span className={`text-xs px-1.5 py-0.5 rounded ${typePill}`}>{typeLabel}</span>
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-2xl font-semibold text-white">
+            <InlineEdit value={entity.name} onSave={updateName} className="text-2xl font-semibold text-white" />
+          </h1>
+          <span className={`text-xs px-1.5 py-0.5 rounded ${typePill}`}>
+            {isContact ? "Contact" : "Organization"}
+          </span>
+        </div>
+
+        {/* Meta fields */}
+        <div className="mt-4 p-4 bg-neutral-900 border border-neutral-800 rounded-lg">
+          {isOrg && (
+            <>
+              <MetaField label="Industry" value={meta.industry} onSave={(v) => updateMeta("industry", v)} />
+              <MetaField label="Status" value={meta.engagement_status} onSave={(v) => updateMeta("engagement_status", v)} />
+              <MetaField label="Products" value={meta.dynatrace_products?.join(", ")} onSave={(v) => updateMeta("dynatrace_products", v.split(",").map((s) => s.trim()).filter(Boolean))} />
+              <MetaField label="Website" value={meta.website} onSave={(v) => updateMeta("website", v)} />
+            </>
+          )}
+          {isContact && (
+            <>
+              <MetaField label="Title" value={meta.title} onSave={(v) => updateMeta("title", v)} />
+              {worksAt && (
+                <div className="flex items-baseline gap-2 py-1">
+                  <span className="text-xs text-neutral-500 w-28 shrink-0">Organization:</span>
+                  <Link to={`/entity/${worksAt.target_entity_id}`} className="text-sm text-blue-400 hover:text-blue-300">
+                    {worksAt.target_entity_name}
+                  </Link>
+                </div>
+              )}
+              <MetaField label="Email" value={meta.email} onSave={(v) => updateMeta("email", v)} />
+              <MetaField label="Phone" value={meta.phone} onSave={(v) => updateMeta("phone", v)} />
+              <MetaField label="Comm. Style" value={meta.communication_style} onSave={(v) => updateMeta("communication_style", v)} />
+            </>
+          )}
+          {meta.notes && (
+            <MetaField label="Notes" value={meta.notes} onSave={(v) => updateMeta("notes", v)} />
+          )}
+          {meta.summary && (
+            <div className="mt-2 pt-2 border-t border-neutral-800">
+              <p className="text-xs text-neutral-400">{meta.summary}</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div>
-        <p className="text-xs text-neutral-500 mb-3 font-medium uppercase tracking-wide">
-          Mentioned in {entity.entries.length}{" "}
-          {entity.entries.length === 1 ? "entry" : "entries"}
-        </p>
-        {entity.entries.length === 0 ? (
-          <p className="text-sm text-neutral-500">No entries yet.</p>
-        ) : (
+      {/* Contacts (for orgs) */}
+      {isOrg && contacts.length > 0 && (
+        <div className="mb-6">
+          <p className="text-xs text-neutral-500 mb-3 font-medium uppercase tracking-wide">
+            Contacts ({contacts.length})
+          </p>
+          <div className="space-y-2">
+            {contacts.map((rel) => (
+              <div key={rel.id} className="flex items-center justify-between p-3 bg-neutral-900 border border-neutral-800 rounded-lg">
+                <Link to={`/entity/${rel.source_entity_id}`} className="text-sm text-violet-400 hover:text-violet-300">
+                  {rel.source_entity_name}
+                </Link>
+                <button onClick={() => removeRelationship(rel.id)} className="text-xs text-neutral-600 hover:text-red-400 transition-colors">
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Other relationships */}
+      {entity.relationships.filter((r) => r.relationship_type !== "works_at").length > 0 && (
+        <div className="mb-6">
+          <p className="text-xs text-neutral-500 mb-3 font-medium uppercase tracking-wide">
+            Relationships
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {entity.relationships
+              .filter((r) => r.relationship_type !== "works_at")
+              .map((rel) => {
+                const isSource = rel.source_entity_id === entity.id;
+                const linkedId = isSource ? rel.target_entity_id : rel.source_entity_id;
+                const linkedName = isSource ? rel.target_entity_name : rel.source_entity_name;
+                return (
+                  <div key={rel.id} className="flex items-center gap-2 px-2 py-1 bg-neutral-900 border border-neutral-800 rounded">
+                    <Link to={`/entity/${linkedId}`} className="text-xs text-blue-400 hover:text-blue-300">
+                      {linkedName}
+                    </Link>
+                    <span className="text-xs text-neutral-600">{rel.relationship_type}</span>
+                    <button onClick={() => removeRelationship(rel.id)} className="text-xs text-neutral-600 hover:text-red-400">
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* Interactions */}
+      {interactions.length > 0 && (
+        <div className="mb-6">
+          <p className="text-xs text-neutral-500 mb-3 font-medium uppercase tracking-wide">
+            Interactions ({interactions.length})
+          </p>
+          <div className="space-y-3">
+            {interactions.map((entry) => (
+              <EntryCard key={entry.id} entry={entry} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Research & Notes */}
+      {research.length > 0 && (
+        <div className="mb-6">
+          <p className="text-xs text-neutral-500 mb-3 font-medium uppercase tracking-wide">
+            Related Research & Notes ({research.length})
+          </p>
+          <div className="space-y-3">
+            {research.map((entry) => (
+              <EntryCard key={entry.id} entry={entry} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* All entries fallback if none in either category */}
+      {interactions.length === 0 && research.length === 0 && entity.entries.length > 0 && (
+        <div className="mb-6">
+          <p className="text-xs text-neutral-500 mb-3 font-medium uppercase tracking-wide">
+            Linked Entries ({entity.entries.length})
+          </p>
           <div className="space-y-3">
             {entity.entries.map((entry) => (
               <EntryCard key={entry.id} entry={entry} />
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {entity.entries.length === 0 && (
+        <p className="text-sm text-neutral-500">No entries linked to this entity.</p>
+      )}
     </div>
   );
 }

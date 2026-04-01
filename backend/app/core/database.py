@@ -27,3 +27,28 @@ async def init_db():
             "ON entries ((meta->>'miniflux_entry_id')) "
             "WHERE source_type = 'rss'"
         ))
+        # Entity system migrations for existing installs
+        await conn.execute(text(
+            "ALTER TABLE entities ADD COLUMN IF NOT EXISTS meta jsonb"
+        ))
+        await conn.execute(text(
+            f"ALTER TABLE entities ADD COLUMN IF NOT EXISTS embedding vector({settings.embed_dim})"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE entities ADD COLUMN IF NOT EXISTS updated_at timestamptz "
+            "DEFAULT now()"
+        ))
+        # Migrate legacy entry_entities → entry_entity_links
+        await conn.execute(text("""
+            INSERT INTO entry_entity_links (entry_id, entity_id, link_type, confidence)
+            SELECT ee.entry_id, ee.entity_id, 'mention', 1.0
+            FROM entry_entities ee
+            WHERE NOT EXISTS (
+                SELECT 1 FROM entry_entity_links eel
+                WHERE eel.entry_id = ee.entry_id AND eel.entity_id = ee.entity_id
+            )
+        """))
+        # Migrate entity_type 'person' → 'contact'
+        await conn.execute(text(
+            "UPDATE entities SET entity_type = 'contact' WHERE entity_type = 'person'"
+        ))
