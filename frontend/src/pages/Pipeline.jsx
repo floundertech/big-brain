@@ -37,6 +37,7 @@ function PipelineTab() {
   const [loading, setLoading] = useState(true);
   const [stageFilter, setStageFilter] = useState("");
   const [repFilter, setRepFilter] = useState("");
+  const [showClosed, setShowClosed] = useState(false);
   const [reps, setReps] = useState([]);
 
   useEffect(() => { api.pipeline.reps().then(setReps); }, []);
@@ -46,8 +47,9 @@ function PipelineTab() {
     const params = {};
     if (stageFilter) params.stage = stageFilter;
     if (repFilter) params.sales_rep = repFilter;
+    if (showClosed) params.include_closed = true;
     api.pipeline.opportunities(params).then(setOpps).finally(() => setLoading(false));
-  }, [stageFilter, repFilter]);
+  }, [stageFilter, repFilter, showClosed]);
 
   return (
     <div>
@@ -68,12 +70,21 @@ function PipelineTab() {
           <option value="">All Reps</option>
           {reps.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
+        <label className="flex items-center gap-1.5 text-sm text-neutral-400 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showClosed}
+            onChange={(e) => setShowClosed(e.target.checked)}
+            className="rounded border-neutral-700"
+          />
+          Show closed
+        </label>
       </div>
 
       {loading ? (
         <p className="text-neutral-500 text-sm">Loading...</p>
       ) : opps.length === 0 ? (
-        <p className="text-neutral-500 text-sm">No opportunities found. Create one from the Entities page.</p>
+        <p className="text-neutral-500 text-sm">{showClosed ? "No opportunities found." : "No open opportunities. Create one from the Entities page, or check \"Show closed\"."}</p>
       ) : (
         <div className="space-y-2">
           {opps.map((opp) => (
@@ -121,15 +132,18 @@ function AccountsTab() {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [repFilter, setRepFilter] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
   const [reps, setReps] = useState([]);
 
   useEffect(() => { api.pipeline.reps().then(setReps); }, []);
 
   useEffect(() => {
     setLoading(true);
-    const params = repFilter ? { sales_rep: repFilter } : {};
+    const params = {};
+    if (repFilter) params.sales_rep = repFilter;
+    if (showInactive) params.active_only = false;
     api.pipeline.accounts(params).then(setAccounts).finally(() => setLoading(false));
-  }, [repFilter]);
+  }, [repFilter, showInactive]);
 
   return (
     <div>
@@ -142,12 +156,21 @@ function AccountsTab() {
           <option value="">All Reps</option>
           {reps.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
+        <label className="flex items-center gap-1.5 text-sm text-neutral-400 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showInactive}
+            onChange={(e) => setShowInactive(e.target.checked)}
+            className="rounded border-neutral-700"
+          />
+          Show inactive
+        </label>
       </div>
 
       {loading ? (
         <p className="text-neutral-500 text-sm">Loading...</p>
       ) : accounts.length === 0 ? (
-        <p className="text-neutral-500 text-sm">No accounts found. Create one from the Entities page.</p>
+        <p className="text-neutral-500 text-sm">{showInactive ? "No accounts found." : "No active accounts. Create one from the Entities page, or check \"Show inactive\"."}</p>
       ) : (
         <div className="space-y-2">
           {accounts.map((acct) => (

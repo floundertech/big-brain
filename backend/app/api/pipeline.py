@@ -65,6 +65,7 @@ class ActivityItem(BaseModel):
 async def list_opportunities(
     stage: str | None = None,
     sales_rep: str | None = None,
+    include_closed: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
     q = select(Entity).where(Entity.entity_type == "opportunity").order_by(Entity.name)
@@ -74,7 +75,12 @@ async def list_opportunities(
     summaries = []
     for opp in opps:
         meta = opp.meta or {}
-        opp_stage = meta.get("stage")
+        opp_stage = meta.get("stage", "")
+
+        # Filter out closed opportunities unless explicitly requested
+        if not include_closed and opp_stage.lower().startswith("closed"):
+            continue
+
         opp_rep = meta.get("sales_rep")
 
         if stage and opp_stage != stage:
@@ -135,6 +141,7 @@ async def list_opportunities(
 @router.get("/accounts", response_model=list[AccountSummary])
 async def list_accounts(
     sales_rep: str | None = None,
+    active_only: bool = True,
     db: AsyncSession = Depends(get_db),
 ):
     q = select(Entity).where(Entity.entity_type == "account").order_by(Entity.name)
@@ -145,6 +152,10 @@ async def list_accounts(
     for acct in accounts:
         meta = acct.meta or {}
         acct_rep = meta.get("sales_rep")
+
+        # Filter inactive accounts unless explicitly requested
+        if active_only and meta.get("active") is False:
+            continue
 
         if sales_rep and acct_rep != sales_rep:
             continue

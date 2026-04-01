@@ -201,6 +201,19 @@ export default function EntityDetail() {
           )}
           {isAccount && (
             <>
+              <div className="flex items-center gap-2 py-1">
+                <span className="text-xs text-neutral-500 w-28 shrink-0">Active:</span>
+                <button
+                  onClick={() => updateMeta("active", !meta.active)}
+                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                    meta.active !== false
+                      ? "border-green-800 text-green-400 bg-green-950"
+                      : "border-neutral-700 text-neutral-500 bg-neutral-800"
+                  }`}
+                >
+                  {meta.active !== false ? "Active" : "Inactive"}
+                </button>
+              </div>
               <MetaField label="Industry" value={meta.industry} onSave={(v) => updateMeta("industry", v)} />
               <MetaField label="Sales Rep" value={meta.sales_rep} onSave={(v) => updateMeta("sales_rep", v)} />
               <MetaField label="Status" value={meta.engagement_status} onSave={(v) => updateMeta("engagement_status", v)} />
