@@ -73,6 +73,58 @@ export default function EntityDetail() {
     load();
   }
 
+  // Relationship linker state
+  const [showRelLinker, setShowRelLinker] = useState(false);
+  const [relSearch, setRelSearch] = useState("");
+  const [relResults, setRelResults] = useState([]);
+  const [relSearching, setRelSearching] = useState(false);
+  const [relType, setRelType] = useState("works_at");
+
+  useEffect(() => {
+    if (!relSearch.trim()) { setRelResults([]); return; }
+    const timeout = setTimeout(() => {
+      setRelSearching(true);
+      api.entities.list({ q: relSearch }).then(setRelResults).finally(() => setRelSearching(false));
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [relSearch]);
+
+  async function handleAddRelationship(targetId) {
+    await api.entities.addRelationship(id, {
+      target_entity_id: targetId,
+      relationship_type: relType,
+    });
+    setShowRelLinker(false);
+    setRelSearch("");
+    load();
+  }
+
+  // Entry linker state
+  const [showEntryLinker, setShowEntryLinker] = useState(false);
+  const [entrySearch, setEntrySearch] = useState("");
+  const [entryResults, setEntryResults] = useState([]);
+  const [entrySearching, setEntrySearching] = useState(false);
+
+  useEffect(() => {
+    if (!entrySearch.trim()) { setEntryResults([]); return; }
+    const timeout = setTimeout(() => {
+      setEntrySearching(true);
+      api.search(entrySearch, 10).then((res) => setEntryResults(res.results || res)).finally(() => setEntrySearching(false));
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [entrySearch]);
+
+  async function handleLinkEntry(entryId) {
+    try {
+      await api.entities.linkEntry(entryId, { entity_id: parseInt(id) });
+      setShowEntryLinker(false);
+      setEntrySearch("");
+      load();
+    } catch (err) {
+      if (err.message.includes("409")) alert("Already linked.");
+    }
+  }
+
   if (loading) return <div className="text-neutral-500 text-sm">Loading...</div>;
   if (!entity) return <div className="text-neutral-500 text-sm">Not found.</div>;
 
@@ -200,6 +252,115 @@ export default function EntityDetail() {
           )}
         </div>
       </div>
+
+      {/* Action buttons */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => { setShowRelLinker(!showRelLinker); setShowEntryLinker(false); }}
+          className="text-xs px-3 py-1.5 rounded border border-dashed border-neutral-700 text-neutral-500 hover:text-neutral-300 hover:border-neutral-500 transition-colors"
+        >
+          + Relationship
+        </button>
+        <button
+          onClick={() => { setShowEntryLinker(!showEntryLinker); setShowRelLinker(false); }}
+          className="text-xs px-3 py-1.5 rounded border border-dashed border-neutral-700 text-neutral-500 hover:text-neutral-300 hover:border-neutral-500 transition-colors"
+        >
+          + Link Entry
+        </button>
+      </div>
+
+      {/* Relationship linker */}
+      {showRelLinker && (
+        <div className="mb-6 p-4 bg-neutral-900 border border-neutral-800 rounded-lg">
+          <div className="flex items-center gap-3 mb-3">
+            <select
+              value={relType}
+              onChange={(e) => setRelType(e.target.value)}
+              className="text-sm bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-neutral-300"
+            >
+              <option value="works_at">Works At</option>
+              <option value="opportunity_for">Opportunity For</option>
+              <option value="reports_to">Reports To</option>
+              <option value="primary_contact">Primary Contact</option>
+              <option value="partner">Partner</option>
+              <option value="formerly_at">Formerly At</option>
+            </select>
+          </div>
+          <input
+            type="text"
+            value={relSearch}
+            onChange={(e) => setRelSearch(e.target.value)}
+            placeholder="Search for an entity to link..."
+            autoFocus
+            className="w-full text-sm bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-neutral-500 mb-2"
+          />
+          {relSearching && <p className="text-xs text-neutral-500">Searching...</p>}
+          {relResults.length > 0 && (
+            <div className="space-y-1 max-h-40 overflow-y-auto">
+              {relResults
+                .filter((e) => e.id !== parseInt(id))
+                .map((e) => {
+                  const label =
+                    e.entity_type === "contact" ? "Contact" :
+                    e.entity_type === "account" ? "Account" :
+                    e.entity_type === "opportunity" ? "Opportunity" :
+                    e.entity_type;
+                  return (
+                    <button
+                      key={e.id}
+                      onClick={() => handleAddRelationship(e.id)}
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-neutral-800 transition-colors flex items-center gap-2"
+                    >
+                      <span className="text-sm text-neutral-300">{e.name}</span>
+                      <span className="text-xs text-neutral-600">{label}</span>
+                    </button>
+                  );
+                })}
+            </div>
+          )}
+          {relSearch && !relSearching && relResults.length === 0 && (
+            <p className="text-xs text-neutral-500">No entities found.</p>
+          )}
+        </div>
+      )}
+
+      {/* Entry linker */}
+      {showEntryLinker && (
+        <div className="mb-6 p-4 bg-neutral-900 border border-neutral-800 rounded-lg">
+          <input
+            type="text"
+            value={entrySearch}
+            onChange={(e) => setEntrySearch(e.target.value)}
+            placeholder="Search entries to link..."
+            autoFocus
+            className="w-full text-sm bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-neutral-500 mb-2"
+          />
+          {entrySearching && <p className="text-xs text-neutral-500">Searching...</p>}
+          {entryResults.length > 0 && (
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {entryResults.map((r) => {
+                const entry = r.entry || r;
+                const entryId = entry.id || r.id;
+                const title = entry.title || r.title;
+                const sourceType = entry.source_type || r.source_type;
+                return (
+                  <button
+                    key={entryId}
+                    onClick={() => handleLinkEntry(entryId)}
+                    className="w-full text-left px-2 py-1.5 rounded hover:bg-neutral-800 transition-colors flex items-center gap-2"
+                  >
+                    <span className="text-sm text-neutral-300 truncate">{title}</span>
+                    <span className="text-xs text-neutral-600 shrink-0">{sourceType}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {entrySearch && !entrySearching && entryResults.length === 0 && (
+            <p className="text-xs text-neutral-500">No entries found.</p>
+          )}
+        </div>
+      )}
 
       {/* Contacts (for orgs) */}
       {isOrg && contacts.length > 0 && (
