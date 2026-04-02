@@ -206,10 +206,8 @@ async def update_entity(entity_id: int, body: EntityUpdate, db: AsyncSession = D
     if body.name is not None:
         entity.name = body.name.strip()
     if body.meta is not None:
-        # Merge meta fields rather than replacing
-        existing_meta = entity.meta or {}
-        existing_meta.update(body.meta)
-        entity.meta = existing_meta
+        # Merge meta fields — must create a new dict so SQLAlchemy detects the change
+        entity.meta = {**(entity.meta or {}), **body.meta}
     await db.commit()
     await db.refresh(entity)
 
