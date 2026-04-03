@@ -37,8 +37,8 @@ cp .env.example .env
 Open `.env` and fill in:
 
 ```env
-ANTHROPIC_API_KEY=sk-ant-...          # required
-POSTGRES_PASSWORD=something-strong    # change from default
+ANTHROPIC_API_KEY=sk-ant-...                                    # required
+DATABASE_URL=postgresql://user:pass@yourhost:5432/bigbrain      # required — point at your Postgres+pgvector instance
 ```
 
 Then:
@@ -161,15 +161,25 @@ The landing page (`/`) surfaces a daily digest, recent activity feed across all 
 ### Gmail connector (optional)
 Label any Gmail message `big-brain` → it gets ingested automatically. The poller runs every 5 minutes (configurable). After ingestion the label is swapped to `big-brain/done`.
 
-**One-time setup:**
-1. Create a Google Cloud project, enable the Gmail API, and create an OAuth 2.0 Desktop App credential at [console.cloud.google.com](https://console.cloud.google.com)
+**One-time setup (headless server):**
+1. Create a Google Cloud project, enable the Gmail API, and create an OAuth 2.0 **Desktop App** credential at [console.cloud.google.com](https://console.cloud.google.com). Set the app to **In production** (not Testing) to avoid 7-day token expiry.
 2. Download the credential JSON and save it as `credentials.json` in the project root (gitignored)
-3. Run the auth script once (outside Docker — needs a browser):
+3. On your Mac, open an SSH tunnel to your server and keep the terminal open:
    ```bash
-   pip install google-api-python-client google-auth-oauthlib
-   python backend/scripts/gmail_auth.py
+   ssh -L 8090:localhost:8090 yourserver
    ```
-4. `gmail_token.json` is written to the project root (gitignored). Restart the app — the poller starts automatically.
+4. On the server, run the auth script inside Docker:
+   ```bash
+   sudo rm -rf gmail_token.json && sudo touch gmail_token.json && sudo chown $USER:$USER gmail_token.json
+   docker compose run --rm \
+     -p 8090:8090 \
+     -v $(pwd)/credentials.json:/app/credentials.json \
+     -v $(pwd):/tokens \
+     -v $(pwd)/backend/scripts:/app/scripts \
+     backend python /app/scripts/gmail_auth.py
+   ```
+5. Open the printed URL in your Mac browser and authorize. `gmail_token.json` is written to the project root (gitignored).
+6. `docker compose up -d` — the poller starts automatically.
 
 ### Entities
 People (contacts) and organizations are extracted automatically from every entry and stored as first-class entities with rich metadata, relationships, and linked interactions.
@@ -200,7 +210,7 @@ Structured PII (Social Security numbers, driver's license numbers, credit cards,
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | Yes | — | From console.anthropic.com |
-| `POSTGRES_PASSWORD` | No | `changeme` | Change before exposing to network |
+| `DATABASE_URL` | Yes | — | PostgreSQL connection string — must point to a Postgres+pgvector instance |
 | `VITE_API_URL` | No | `http://localhost:8000` | Set to server IP for LAN access |
 | `EMBED_MODEL` | No | `nomic-ai/nomic-embed-text-v1.5` | Override embedding model |
 | `TAVILY_API_KEY` | No | — | Enables web search in chat. Free plan at tavily.com (1,000 searches/month). |
@@ -332,9 +342,8 @@ docker compose down && docker compose up -d
 Confirm it loaded: `docker compose exec backend env | grep ANTHROPIC`
 
 **Backend fails to start / DB connection refused**
-The backend waits for Postgres to be healthy before starting. If it fails, check:
+Check that `DATABASE_URL` in `.env` points to a reachable Postgres instance with pgvector installed. Check backend logs:
 ```bash
-docker compose logs db
 docker compose logs backend
 ```
 
@@ -400,7 +409,7 @@ curl -X POST http://localhost:8000/entries/reindex
 ```
 
 **Gmail connector not ingesting messages**
-Check that `gmail_token.json` exists in the project root and is mounted into the container. Backend logs will show `Gmail token not found — poller disabled` on startup if it's missing. If the token is expired, re-run `python backend/scripts/gmail_auth.py`. The poller watches multiple labels: `big-brain`, `big-brain/customer`, `big-brain/research`, `big-brain/reference`. Use the routed labels to classify emails into different pipelines.
+Check that `gmail_token.json` exists in the project root as a **file** (not a directory — Docker auto-creates a directory if the file is missing at mount time). Backend logs will show `Gmail token not found — poller disabled` on startup if it's missing or unreadable. If the token needs to be regenerated, follow the one-time setup steps above. The poller watches multiple labels: `big-brain`, `big-brain/customer`, `big-brain/research`, `big-brain/reference`. Use the routed labels to classify emails into different pipelines.
 
 **Updating from a version before the entity system overhaul**
 The entity type `person` has been renamed to `contact` and the `entry_entities` table has been replaced by `entry_entity_links`. These migrations run automatically on startup via `init_db()`. If you need to run them manually:
