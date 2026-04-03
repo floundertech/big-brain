@@ -1,5 +1,48 @@
 # Session Summaries
 
+## Session 14: Gmail Reauth + Ops Cleanup (2026-04-02)
+
+### Goal
+Fix broken Gmail OAuth (token expired after 7-day testing mode limit), clean up docker-compose.yml.
+
+### What Got Done
+
+**Gmail OAuth reauth — two root cause fixes:**
+- `backend/scripts/gmail_auth.py`: replaced `flow.run_local_server()` with a custom `HTTPServer('0.0.0.0', 8090)` callback server. `run_local_server()` binds to `127.0.0.1` inside the container; Docker's port mapping routes to the container's eth0 IP, not loopback — so SSH tunnel traffic was silently dropped. Binding to `0.0.0.0` fixes this.
+- `docker-compose.yml`: removed `:ro` from the gmail_token volume mount. The backend refreshes and rewrites the access token on expiry — read-only mount caused `OSError: [Errno 30] Read-only file system` on every poll once the 1-hour access token expired.
+
+**Google OAuth app published to production:** removed 7-day refresh token expiry limit (was in "testing" mode).
+
+**docker-compose.yml cleanup:**
+- Removed `db` service — deployment uses postgres01 on dock12, not local Postgres.
+- Removed `depends_on: db` from backend service.
+- Removed `db_data` named volume.
+- `DATABASE_URL` now required explicitly (no default pointing to removed db service).
+
+### Key Gotchas for Next Reauth
+
+**Docker creates directories on missing bind-mount files.** If `gmail_token.json` doesn't exist when Docker mounts `./gmail_token.json:/app/gmail_token.json`, Docker creates it as a root-owned directory. Must `sudo rm -rf && sudo touch && sudo chown` before running the auth script.
+
+**Reauth procedure (token lasts indefinitely now that app is published):**
+1. Mac: `ssh -L 8090:localhost:8090 mrokern@docker01` (keep open)
+2. docker01: `sudo rm -rf gmail_token.json && sudo touch gmail_token.json && sudo chown mrokern:mrokern gmail_token.json`
+3. docker01: `docker compose run --rm -p 8090:8090 -v $(pwd)/credentials.json:/app/credentials.json -v $(pwd):/tokens -v $(pwd)/backend/scripts:/app/scripts backend python /app/scripts/gmail_auth.py`
+4. Open printed URL in Mac browser, authorize
+5. `docker compose up -d backend`
+
+### What's NOT here
+- The additional pipeline labels (`big-brain/customer`, `big-brain/research`, `big-brain/reference`) are wired for routing but process identically to `big-brain` — no differentiated enrichment yet.
+
+### Commits
+- `gmail_auth.py`: headless OAuth callback server with 0.0.0.0 binding
+- `docker-compose.yml`: remove db service, remove :ro token mount, require explicit DATABASE_URL
+
+### Next Up
+- Entity search integration into global search results
+- Differentiated pipeline enrichment for customer/research/reference labels
+
+---
+
 ## Session 13: Entity System & Relationship Intelligence (2026-03-31)
 
 ### Goal

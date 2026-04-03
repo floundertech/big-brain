@@ -3,7 +3,7 @@
 ## Active branch
 `feature/entity-system` — Session 13 (Entity System & Relationship Intelligence).
 
-## Current state (2026-03-31)
+## Current state (2026-04-02)
 
 Session 13 complete. Full entity system overhaul implementing CRM-like entity layer with 5 phases.
 
@@ -110,6 +110,11 @@ Session 8 complete. Added `_record_usage()` helper to `claude.py` — attaches `
 Session 7 complete + confirmed working. Auto-instrumentation via OpenLLMetry (Traceloop) for Dynatrace.
 
 Previous sessions: Chunk RAG + Tavily fix, Layer 2e Agentic Chat, Layer 2 Entity Model, async fix, OOM fix, markdown rendering.
+
+**Session 14 changes (2026-04-02):**
+- `backend/scripts/gmail_auth.py`: replaced `run_local_server()` with custom `HTTPServer('0.0.0.0', 8090)` — `run_local_server()` binds to container's 127.0.0.1, Docker port mapping can't reach it.
+- `docker-compose.yml`: removed `db` service (deployment uses postgres01 on dock12), removed `:ro` from gmail_token mount (backend rewrites token on refresh), `DATABASE_URL` now required with no default.
+- Google OAuth app published to production — no more 7-day token expiry.
 
 ### Known environment gotchas
 - `ANTHROPIC_API_KEY` must be set in `.env` before `docker compose up`. Missing key → every ingest returns `500 TypeError: Could not resolve authentication method`.
