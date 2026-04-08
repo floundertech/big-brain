@@ -28,12 +28,13 @@ services:
       - ./gmail_token.json:/app/gmail_token.json
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
     restart: unless-stopped
     ports:
       - "3000:3000"
-    environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
 
 volumes:
   embed_cache:
