@@ -222,13 +222,27 @@ export default function EntryDetail() {
               e.entity_type === "opportunity" ? "border-cyan-900 text-cyan-400 hover:border-cyan-700" :
               "border-neutral-700 text-neutral-400 hover:border-neutral-500";
             return (
-              <Link
-                key={e.id}
-                to={`/entity/${e.id}`}
-                className={`text-xs px-2 py-0.5 rounded border transition-colors ${pill}`}
-              >
-                {e.name}
-              </Link>
+              <span key={e.id} className="inline-flex items-center gap-0">
+                <Link
+                  to={`/entity/${e.id}`}
+                  className={`text-xs px-2 py-0.5 rounded-l border transition-colors ${pill}`}
+                >
+                  {e.name}
+                </Link>
+                {e.link_id && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Unlink "${e.name}" from this entry?`)) return;
+                      await api.entities.unlinkEntry(e.link_id);
+                      load();
+                    }}
+                    className={`text-xs px-1 py-0.5 rounded-r border border-l-0 transition-colors hover:bg-red-950 hover:text-red-400 hover:border-red-800 ${pill}`}
+                    title={`Unlink ${e.name}`}
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
             );
           })}
           <button

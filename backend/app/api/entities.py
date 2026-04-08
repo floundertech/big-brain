@@ -87,21 +87,60 @@ class EntryLinkCreate(BaseModel):
 # Entity CRUD
 # ---------------------------------------------------------------------------
 
-@router.get("/", response_model=list[EntityOut])
+@router.get("/", response_model=list[dict])
 async def list_entities(
     entity_type: str | None = None,
     q: str | None = None,
+    entry_id: int | None = None,
     limit: int = 50,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
+    if entry_id:
+        # Return entities linked to a specific entry, with link_id for unlinking
+        query = (
+            select(Entity, EntryEntityLink.id.label("link_id"))
+            .join(EntryEntityLink, EntryEntityLink.entity_id == Entity.id)
+            .where(EntryEntityLink.entry_id == entry_id)
+            .order_by(Entity.name)
+            .limit(limit)
+            .offset(offset)
+        )
+        if entity_type:
+            query = query.where(Entity.entity_type == entity_type)
+        if q:
+            query = query.where(Entity.name.ilike(f"%{q}%"))
+        result = await db.execute(query)
+        return [
+            {
+                "id": entity.id,
+                "entity_type": entity.entity_type,
+                "name": entity.name,
+                "meta": entity.meta,
+                "created_at": entity.created_at,
+                "updated_at": entity.updated_at,
+                "link_id": link_id,
+            }
+            for entity, link_id in result.all()
+        ]
+
     query = select(Entity).order_by(Entity.name).limit(limit).offset(offset)
     if entity_type:
         query = query.where(Entity.entity_type == entity_type)
     if q:
         query = query.where(Entity.name.ilike(f"%{q}%"))
     result = await db.execute(query)
-    return result.scalars().all()
+    return [
+        {
+            "id": e.id,
+            "entity_type": e.entity_type,
+            "name": e.name,
+            "meta": e.meta,
+            "created_at": e.created_at,
+            "updated_at": e.updated_at,
+        }
+        for e in result.scalars().all()
+    ]
 
 
 @router.get("/{entity_id}", response_model=EntityDetail)
