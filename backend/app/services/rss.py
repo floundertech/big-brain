@@ -238,6 +238,8 @@ async def poll_once() -> dict:
                 pub = article.get("published_at", "")
                 if pub:
                     pub_dt = datetime.fromisoformat(pub.replace("Z", "+00:00"))
+                    # Cap at current time so future-dated articles can't poison the poll timestamp
+                    pub_dt = min(pub_dt, datetime.now(timezone.utc))
                     if pub_dt > latest_ts:
                         latest_ts = pub_dt
             except Exception:
